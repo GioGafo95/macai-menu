@@ -19,6 +19,7 @@ const FRUTAS = [
   ['Kiwi', 10], ['Fresa', 10], ['Plátano', 10],
   ['Mango', 10, 'De temporada'], ['Blueberries', 10, 'De temporada'],
 ];
+// Chilibowls (desactivados por el momento)
 const CHILITOPPINGS = [
   ['Cacahuates enchilados', 10], ['Arándanos enchilados', 10], ['Coco enchilado', 10], ['Chamoy sin azúcar', 10],
 ];
@@ -74,25 +75,27 @@ export function buildMacaiCatalog({ zones } = {}) {
   };
 
   const bowls = category('Arma tu Bowl', 1);
-  const chili = category('Chilibowls', 2);
+  // Chilibowls desactivados por el momento: para regresarlos, descomenta las líneas marcadas con «Chilibowls».
+  // const chili = category('Chilibowls', 2); // Chilibowls
   const waffles = category('Waffles', 3);
   const smoothies = category('Smoothies', 4);
 
   const base = group('Sabor de tu base', 1, 1, 1, BASES);
-  const chiliBase = group('Sabor de tu base', 1, 1, 2, CHILI_BASES);
+  // const chiliBase = group('Sabor de tu base', 1, 1, 2, CHILI_BASES); // Chilibowls
   const toppings = group('Toppings', 0, 0, 3, TOPPINGS);
   const spreads = group('Spreads', 0, 0, 4, SPREADS);
   const frutas = group('Frutas', 0, 0, 5, FRUTAS);
-  const chiliToppings = group('Chilitoppings', 0, 0, 6, CHILITOPPINGS);
+  // const chiliToppings = group('Chilitoppings', 0, 0, 6, CHILITOPPINGS); // Chilibowls
   const nieve = group('Sabor de tu nieve (2 bolas)', 1, 1, 7, BASES);
 
   const bowlGroups = [base, toppings, spreads, frutas];
   product(bowls, 'Bowl Chico', 'Elige tu base. Incluye 2 opciones entre toppings, spreads y frutas.', 90, { sort: 1, groups: bowlGroups, included: 2 });
   product(bowls, 'Bowl Grande', 'Elige tu base. Incluye 3 opciones entre toppings, spreads y frutas.', 130, { featured: true, sort: 2, groups: bowlGroups, included: 3 });
 
-  const chiliGroups = [chiliBase, chiliToppings, toppings, spreads, frutas];
-  product(chili, 'Chilibowl Chico', 'Base enchilada. Incluye 2 opciones entre toppings, chilitoppings, spreads y frutas.', 110, { sort: 1, groups: chiliGroups, included: 2 });
-  product(chili, 'Chilibowl Grande', 'Base enchilada. Incluye 3 opciones entre toppings, chilitoppings, spreads y frutas.', 150, { sort: 2, groups: chiliGroups, included: 3 });
+  // Chilibowls
+  // const chiliGroups = [chiliBase, chiliToppings, toppings, spreads, frutas];
+  // product(chili, 'Chilibowl Chico', 'Base enchilada. Incluye 2 opciones entre toppings, chilitoppings, spreads y frutas.', 110, { sort: 1, groups: chiliGroups, included: 2 });
+  // product(chili, 'Chilibowl Grande', 'Base enchilada. Incluye 3 opciones entre toppings, chilitoppings, spreads y frutas.', 150, { sort: 2, groups: chiliGroups, included: 3 });
 
   product(waffles, 'Waffle', 'Waffle con 2 bolas de nieve del sabor que elijas. Incluye 2 opciones entre toppings, spreads y frutas.', 160,
     { sort: 1, groups: [nieve, toppings, spreads, frutas], included: 2 });

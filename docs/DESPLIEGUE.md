@@ -2,7 +2,7 @@
 
 Infraestructura como código con **AWS CDK** (carpeta `infra/`) y despliegue automático con **GitHub Actions**.
 
-## Arquitectura (paga sólo por uso)
+## Arquitectura (paga solo por uso)
 
 ```
 Cliente / Admin ──► CloudFront (HTTPS, caché) ─┬─► S3 "site"     página: HTML, JS, CSS, logo
@@ -18,12 +18,12 @@ Cliente / Admin ──► CloudFront (HTTPS, caché) ─┬─► S3 "site"     
 
 | | QA | Prod |
 |---|---|---|
-| Se despliega | Automático en cada push a `main` | Manual ("Run workflow" → prod), sólo desde `main`, con aprobación |
+| Se despliega | Automático en cada push a `main` | Manual ("Run workflow" → prod), solo desde `main`, con aprobación |
 | Datos al borrar el stack | Se borran | **Se conservan** (tabla y fotos con `RETAIN`) |
 | Respaldo de la tabla | No | Point-in-time recovery (35 días) |
 | Protección contra borrado | No | Sí (stack y tabla) |
 | Logs | 1 semana | 1 mes |
-| Prueba después de desplegar | Completa (crea y cancela un pedido de prueba) | Sólo lectura (no crea pedidos) |
+| Prueba después de desplegar | Completa (crea y cancela un pedido de prueba) | Solo lectura (no crea pedidos) |
 
 ## Costo estimado
 
@@ -64,7 +64,7 @@ Crea el stack `CDKToolkit` (bucket para artefactos y roles de despliegue). Cuest
 npx cdk deploy Macai-github -c budgetEmail=tu@correo.com
 ```
 
-- Crea el proveedor OIDC de GitHub y el rol `macai-github-deploy`, que **sólo** puede desplegar desde los environments `qa` y `prod` de `GioGafo95/macai-menu`.
+- Crea el proveedor OIDC de GitHub y el rol `macai-github-deploy`, que **solo** puede desplegar desde los environments `qa` y `prod` de `GioGafo95/macai-menu`.
 - `budgetEmail` es opcional: crea la alerta de presupuesto de $5 USD/mes (cámbialo con `-c budgetUsd=10`). AWS te enviará un correo para confirmar la suscripción.
 - Si tu cuenta ya tenía el proveedor OIDC de GitHub, agrega `-c createOidcProvider=false`.
 
@@ -91,7 +91,7 @@ gh secret set ADMIN_PASSWORD --env prod
 
 Protege producción en GitHub → **Settings → Environments → prod**:
 - **Required reviewers**: agrégate a ti (cada despliegue a prod espera tu aprobación).
-- **Deployment branches**: sólo `main`.
+- **Deployment branches**: solo `main`.
 
 ### 4. Primer despliegue a QA
 
@@ -123,7 +123,7 @@ GitHub → **Actions → Desplegar → Run workflow** → rama `main`, ambiente 
 
 ### Contraseña del panel
 
-- `ADMIN_PASSWORD` (secreto del environment) sólo se usa la **primera vez**; después cámbiala desde el panel (Ajustes → Seguridad).
+- `ADMIN_PASSWORD` (secreto del environment) solo se usa la **primera vez**; después cámbiala desde el panel (Ajustes → Seguridad).
 - La prueba de humo de **QA** inicia sesión con ese secreto: si cambias la contraseña de QA desde el panel, actualiza también el secreto (`gh secret set ADMIN_PASSWORD --env qa`).
 
 ## Pendiente / siguientes pasos

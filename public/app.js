@@ -177,7 +177,7 @@ function openProduct(p, editKey) {
       ${p.allow_notes ? `
         <div class="field">
           <label for="p-note">Notas para la cocina <span class="muted small">(opcional)</span></label>
-          <textarea class="input" id="p-note" maxlength="200" placeholder="Ej. sin cebolla, aderezo aparte…">${esc(editing?.note || '')}</textarea>
+          <textarea class="input" id="p-note" maxlength="200" placeholder="Ej. sin plátano, granola aparte…">${esc(editing?.note || '')}</textarea>
         </div>` : ''}
     </div>
     <div class="sheet-foot">

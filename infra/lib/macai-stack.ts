@@ -14,12 +14,12 @@ const ROOT = path.join(__dirname, '..', '..');
 
 export interface MacaiStackProps extends StackProps {
   envName: 'qa' | 'prod';
-  /** Contraseña inicial del panel (sólo se usa la primera vez). */
+  /** Contraseña inicial del panel (solo se usa la primera vez). */
   adminPassword?: string;
 }
 
 /**
- * Macaí Bowls — arquitectura serverless de muy bajo costo (paga sólo por uso):
+ * Macaí Bowls — arquitectura serverless de muy bajo costo (paga solo por uso):
  *
  *   Navegador ──► CloudFront ─┬─► S3 "site"      (página: HTML, JS, CSS, logo)
  *                             ├─► S3 "uploads"   (/uploads/* fotos de productos)

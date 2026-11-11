@@ -26,7 +26,7 @@ Lista pedidos (más recientes primero).
 |------------------|----------------------------|-------------|
 | `from`           | `2026-11-01` o ISO         | Creados desde (incluye) |
 | `to`             | `2026-11-30` o ISO         | Creados hasta (incluye el día completo si es fecha) |
-| `updated_since`  | `2026-11-11T15:00:00Z`     | Sólo pedidos creados **o modificados** después de esta fecha. Ideal para sincronizar. Ordena por `updated_at`. |
+| `updated_since`  | `2026-11-11T15:00:00Z`     | Solo pedidos creados **o modificados** después de esta fecha. Ideal para sincronizar. Ordena por `updated_at`. |
 | `status`         | `entregado` o `nuevo,listo`| Uno o varios estados separados por coma |
 | `paid`           | `true` / `false`           | Filtra por pagado |
 | `fulfillment`    | `delivery` / `pickup`      | Tipo de entrega |

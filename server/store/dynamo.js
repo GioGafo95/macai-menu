@@ -15,7 +15,7 @@ import { ConflictError, ACTIVE_STATUSES } from './common.js';
  * Índices:
  *   GSI1 (GSI1PK='ORDERS', GSI1SK=created_at#id)   pedidos por fecha de creación
  *   GSI2 (GSI2PK='ORDERS', GSI2SK=updated_at#id)   pedidos por última modificación (sincronización)
- *   GSI3 (GSI3PK='ACTIVE', GSI3SK=created_at#id)   índice disperso: sólo pedidos activos
+ *   GSI3 (GSI3PK='ACTIVE', GSI3SK=created_at#id)   índice disperso: solo pedidos activos
  */
 export function createDynamoStore({ table, uploadsBucket }) {
   if (!table) throw new Error('Falta TABLE_NAME');

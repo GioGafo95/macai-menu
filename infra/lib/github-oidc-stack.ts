@@ -12,7 +12,7 @@ export interface GithubOidcStackProps extends StackProps {
    * ej. "repo:dueño@123/repo@456". Se aceptan ambos formatos.
    */
   subjectPrefix?: string;
-  /** false si la cuenta ya tiene el proveedor OIDC de GitHub (sólo puede existir uno) */
+  /** false si la cuenta ya tiene el proveedor OIDC de GitHub (solo puede existir uno) */
   createProvider?: boolean;
   /** Correo para la alerta de presupuesto mensual (opcional) */
   budgetEmail?: string;
@@ -24,7 +24,7 @@ export interface GithubOidcStackProps extends StackProps {
  * Permite que GitHub Actions despliegue en AWS sin guardar llaves de acceso:
  * GitHub entrega un token temporal (OIDC) y AWS lo cambia por credenciales de 1 hora.
  *
- * El rol sólo puede asumir los roles de CDK creados por `cdk bootstrap`, y sólo desde los
+ * El rol solo puede asumir los roles de CDK creados por `cdk bootstrap`, y solo desde los
  * environments "qa" y "prod" de este repositorio.
  */
 export class GithubOidcStack extends Stack {
@@ -54,7 +54,7 @@ export class GithubOidcStack extends Stack {
       }),
     });
 
-    // Sólo puede usar los roles de CDK (publicar assets y desplegar con CloudFormation)
+    // Solo puede usar los roles de CDK (publicar assets y desplegar con CloudFormation)
     role.addToPolicy(new iam.PolicyStatement({
       actions: ['sts:AssumeRole', 'sts:TagSession'],
       resources: [`arn:aws:iam::${this.account}:role/cdk-hnb659fds-*`],

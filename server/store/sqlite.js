@@ -103,7 +103,7 @@ export async function createSqliteStore({ dataDir }) {
 
 /**
  * Convierte la base de la versión anterior (tablas relacionales) al nuevo formato de documentos.
- * Se ejecuta una sola vez: sólo si existen las tablas viejas y aún no hay documento 'catalog'.
+ * Se ejecuta una sola vez: solo si existen las tablas viejas y aún no hay documento 'catalog'.
  */
 function migrateLegacy(db) {
   const has = (t) => !!db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);

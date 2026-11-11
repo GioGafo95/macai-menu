@@ -33,7 +33,7 @@ export function deliveryFeeFor(subtotal, zone, s) {
 /**
  * "Incluye N opciones de hasta $X": descuenta hasta X a las N opciones con costo más caras.
  * Modifica cada topping: price = lo que se cobra, list_price = precio normal, included = true si entró en el paquete.
- * La misma regla está en public/app.js (sólo para mostrar el precio; el servidor manda).
+ * La misma regla está en public/app.js (solo para mostrar el precio; el servidor manda).
  */
 export function applyIncluded(toppings, count, value) {
   for (const t of toppings) { t.list_price = t.price; t.included = false; }

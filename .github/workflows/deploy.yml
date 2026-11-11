@@ -1,8 +1,8 @@
 # Despliegue de Macaí Bowls en AWS (CDK).
 #
 #  - Push a main           → pruebas + despliegue automático a QA
-#  - "Run workflow" manual  → elegir qa o prod (prod sólo desde main y con aprobación)
-#  - Pull requests          → sólo pruebas (no despliega)
+#  - "Run workflow" manual  → elegir qa o prod (prod solo desde main y con aprobación)
+#  - Pull requests          → solo pruebas (no despliega)
 #
 # Configuración (una sola vez) → ver docs/DESPLIEGUE.md
 #   Variables del repo:   AWS_DEPLOY_ROLE_ARN, AWS_REGION (opcional, default us-east-1)

@@ -148,7 +148,7 @@ function ensureAudio() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
   } catch { /* sin audio */ }
 }
-// Los navegadores sólo permiten audio después de una interacción
+// Los navegadores solo permiten audio después de una interacción
 document.addEventListener('pointerdown', () => { if (soundOn) ensureAudio(); }, { once: true });
 
 function beep() {
@@ -579,7 +579,7 @@ async function renderMenu() {
   const groupOptions = groups.map((g) => ({ value: g.id, label: `${g.name} (${g.toppings.length} opciones)` }));
 
   const productFields = () => [
-    { name: 'name', label: 'Nombre', placeholder: 'Ej. Bowl de pollo' },
+    { name: 'name', label: 'Nombre', placeholder: 'Ej. Bowl Grande' },
     { name: 'description', label: 'Descripción', type: 'textarea', rows: 2, placeholder: 'Ingredientes, porción…' },
     { name: 'price', label: 'Precio', type: 'number', step: '0.5' },
     { name: 'category_id', label: 'Categoría', type: 'select', options: [{ value: '', label: '— Sin categoría —' }, ...cats.map((c) => ({ value: c.id, label: c.name }))] },
@@ -590,7 +590,7 @@ async function renderMenu() {
       hint: 'Ej. 2 = "incluye 2 toppings, spreads o frutas". 0 = todas se cobran.' },
     { name: 'included_value', label: 'Valor cubierto por cada opción incluida', type: 'number', step: '0.5',
       hint: 'Ej. 10 = cubre opciones de $10; si eligen una de $15 se cobra la diferencia ($5).' },
-    { name: 'allow_notes', label: 'Permitir notas del cliente (ej. "sin cebolla")', type: 'checkbox' },
+    { name: 'allow_notes', label: 'Permitir notas del cliente (ej. "sin plátano")', type: 'checkbox' },
     { name: 'featured', label: 'Marcar como favorito ⭐', type: 'checkbox' },
     { name: 'active', label: 'Disponible (visible en el menú)', type: 'checkbox' },
     { name: 'sort', label: 'Orden', type: 'number', step: '1', hint: 'Los números menores aparecen primero.' },
@@ -606,7 +606,7 @@ async function renderMenu() {
       renderMenu();
     },
     onDelete: p ? async () => { await A(`/products/${p.id}`, { method: 'DELETE' }); toast('Producto eliminado'); renderMenu(); } : null,
-    deleteConfirm: p ? `¿Eliminar "${p.name}"? Si sólo quieres ocultarlo, desmarca "Disponible".` : '',
+    deleteConfirm: p ? `¿Eliminar "${p.name}"? Si solo quieres ocultarlo, desmarca "Disponible".` : '',
   });
 
   const editCategory = (c) => openForm({
@@ -679,13 +679,13 @@ async function renderToppings() {
   const groups = await A('/topping-groups');
 
   const groupFields = [
-    { name: 'name', label: 'Nombre del grupo', placeholder: 'Ej. Proteína, Extras, Aderezo' },
+    { name: 'name', label: 'Nombre del grupo', placeholder: 'Ej. Toppings, Spreads, Frutas' },
     { name: 'min_select', label: 'Mínimo a elegir', type: 'number', step: '1', hint: '0 = opcional. 1 o más = obligatorio.' },
-    { name: 'max_select', label: 'Máximo a elegir', type: 'number', step: '1', hint: '0 = sin límite. 1 = sólo una opción.' },
+    { name: 'max_select', label: 'Máximo a elegir', type: 'number', step: '1', hint: '0 = sin límite. 1 = solo una opción.' },
     { name: 'sort', label: 'Orden', type: 'number', step: '1' },
   ];
   const toppingFields = [
-    { name: 'name', label: 'Nombre', placeholder: 'Ej. Aguacate' },
+    { name: 'name', label: 'Nombre', placeholder: 'Ej. Granola' },
     { name: 'price', label: 'Precio extra', type: 'number', step: '0.5', hint: '0 si no tiene costo adicional.' },
     { name: 'description', label: 'Descripción (opcional)', placeholder: 'Ej. Açaí, plátano, frutos rojos' },
     { name: 'active', label: 'Disponible', type: 'checkbox' },
@@ -758,7 +758,7 @@ async function renderDelivery() {
       fields: [
         { name: 'delivery_enabled', label: 'Ofrecer envío a domicilio', type: 'checkbox' },
         { name: 'pickup_enabled', label: 'Permitir recoger en tienda', type: 'checkbox' },
-        { name: 'delivery_flat_fee', label: 'Costo de envío fijo', type: 'number', step: '0.5', hint: 'Se usa sólo si no tienes zonas activas.' },
+        { name: 'delivery_flat_fee', label: 'Costo de envío fijo', type: 'number', step: '0.5', hint: 'Se usa solo si no tienes zonas activas.' },
         { name: 'free_delivery_over', label: 'Envío gratis a partir de', type: 'number', step: '1', hint: '0 = desactivado.' },
         { name: 'min_order', label: 'Pedido mínimo', type: 'number', step: '1', hint: '0 = sin mínimo.' },
         { name: 'estimated_time', label: 'Tiempo estimado', placeholder: 'Ej. 30 a 45 min' },

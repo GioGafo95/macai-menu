@@ -44,7 +44,7 @@ function lambdaBody(req, res, next) {
 /**
  * Crea la app Express. La usan:
  *  - server/index.js  → servidor local (sirve también la página y las imágenes)
- *  - server/lambda.js → AWS Lambda (sólo /api; la página y las imágenes las sirve CloudFront desde S3)
+ *  - server/lambda.js → AWS Lambda (solo /api; la página y las imágenes las sirve CloudFront desde S3)
  */
 export function createApp({ serveStatic = true } = {}) {
   const app = express();
