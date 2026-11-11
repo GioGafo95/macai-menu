@@ -122,6 +122,7 @@ export function createDynamoStore({ table, uploadsBucket }) {
         values[':from'] = from || '0';
         values[':to'] = `${to || '9999'}#~`;
       }
+      if (!cond.includes('#sk')) delete names['#sk']; // DynamoDB rechaza nombres sin usar
       const out = [];
       let ExclusiveStartKey;
       do {
