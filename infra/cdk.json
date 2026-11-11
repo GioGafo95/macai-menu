@@ -5,6 +5,7 @@
   },
   "context": {
     "githubRepo": "GioGafo95/macai-menu",
+    "githubSubjectPrefix": "repo:GioGafo95@42852664/macai-menu@1454054051",
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:checkSecretUsage": true,
     "@aws-cdk/core:target-partitions": ["aws"],

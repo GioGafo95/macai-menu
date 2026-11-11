@@ -31,6 +31,7 @@ new MacaiStack(app, 'Macai-prod', {
 new GithubOidcStack(app, 'Macai-github', {
   env,
   repo: app.node.tryGetContext('githubRepo'),
+  subjectPrefix: app.node.tryGetContext('githubSubjectPrefix'),
   createProvider: String(app.node.tryGetContext('createOidcProvider')) !== 'false',
   // npx cdk deploy Macai-github -c budgetEmail=tu@correo.com [-c budgetUsd=5]
   budgetEmail: app.node.tryGetContext('budgetEmail'),

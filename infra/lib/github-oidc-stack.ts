@@ -6,6 +6,12 @@ import * as budgets from 'aws-cdk-lib/aws-budgets';
 export interface GithubOidcStackProps extends StackProps {
   /** "dueño/repositorio" de GitHub */
   repo: string;
+  /**
+   * Prefijo "sub" del token de GitHub cuando el repo usa sujetos inmutables
+   * (gh api repos/<dueño>/<repo>/actions/oidc/customization/sub → sub_claim_prefix),
+   * ej. "repo:dueño@123/repo@456". Se aceptan ambos formatos.
+   */
+  subjectPrefix?: string;
   /** false si la cuenta ya tiene el proveedor OIDC de GitHub (sólo puede existir uno) */
   createProvider?: boolean;
   /** Correo para la alerta de presupuesto mensual (opcional) */
@@ -41,7 +47,9 @@ export class GithubOidcStack extends Stack {
       assumedBy: new iam.WebIdentityPrincipal(providerArn, {
         StringEquals: { [`${issuer}:aud`]: 'sts.amazonaws.com' },
         StringLike: {
-          [`${issuer}:sub`]: [`repo:${props.repo}:environment:qa`, `repo:${props.repo}:environment:prod`],
+          [`${issuer}:sub`]: [`repo:${props.repo}`, props.subjectPrefix]
+            .filter((p): p is string => !!p)
+            .flatMap((p) => [`${p}:environment:qa`, `${p}:environment:prod`]),
         },
       }),
     });
