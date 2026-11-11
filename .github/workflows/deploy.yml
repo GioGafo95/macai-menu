@@ -1,0 +1,151 @@
+# Despliegue de Macaí Bowls en AWS (CDK).
+#
+#  - Push a main           → pruebas + despliegue automático a QA
+#  - "Run workflow" manual  → elegir qa o prod (prod sólo desde main y con aprobación)
+#  - Pull requests          → sólo pruebas (no despliega)
+#
+# Configuración (una sola vez) → ver docs/DESPLIEGUE.md
+#   Variables del repo:   AWS_DEPLOY_ROLE_ARN, AWS_REGION (opcional, default us-east-1)
+#   Environments:         qa, prod — cada uno con el secreto ADMIN_PASSWORD
+name: Desplegar
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Ambiente
+        type: choice
+        options: [qa, prod]
+        default: qa
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24
+
+jobs:
+  test:
+    name: Pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          npm ci
+          npm ci --prefix infra
+
+      - name: Revisar sintaxis
+        run: |
+          for f in server/*.js server/routes/*.js server/store/*.js public/*.js public/admin/*.js scripts/*.mjs; do
+            node --check "$f"
+          done
+
+      - name: Prueba de punta a punta (servidor local)
+        env:
+          ADMIN_PASSWORD: ci-password-123
+          DATA_DIR: ${{ runner.temp }}/data
+          PORT: 3000
+        run: |
+          node server/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3000/api/health >/dev/null && break; sleep 1; done
+          node scripts/smoke-test.mjs http://localhost:3000 "$ADMIN_PASSWORD" || (cat "$RUNNER_TEMP/server.log"; exit 1)
+
+      - name: Tipos y synth de CDK
+        working-directory: infra
+        env:
+          CDK_DEFAULT_ACCOUNT: '000000000000'
+          CDK_DEFAULT_REGION: us-east-1
+        run: |
+          npx tsc --noEmit
+          npx cdk synth --quiet
+
+  deploy:
+    name: Desplegar (${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'qa' }})
+    needs: test
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.environment == 'qa' || github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # OIDC: credenciales temporales de AWS sin llaves guardadas
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'qa' }}
+      url: ${{ steps.outputs.outputs.url }}
+    concurrency:
+      group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'qa' }}
+      cancel-in-progress: false
+    env:
+      STAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'qa' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            infra/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          npm ci
+          npm ci --prefix infra
+
+      - name: Credenciales de AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Ver cambios (cdk diff)
+        working-directory: infra
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cdk diff "Macai-$STAGE" || true
+
+      - name: Desplegar (cdk deploy)
+        working-directory: infra
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npx cdk deploy "Macai-$STAGE" --require-approval never --outputs-file outputs.json
+
+      - name: Leer URL
+        id: outputs
+        run: |
+          URL=$(node -p "require('./infra/outputs.json')['Macai-$STAGE'].Url")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "### 🚀 Macaí $STAGE desplegado" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Menú: $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Panel: $URL/admin/" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prueba de humo
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          URL: ${{ steps.outputs.outputs.url }}
+        run: |
+          # CloudFront puede tardar unos segundos en servir la versión nueva
+          for i in $(seq 1 20); do curl -sf "$URL/api/health" >/dev/null && break; sleep 6; done
+          if [ "$STAGE" = "prod" ]; then
+            node scripts/smoke-test.mjs "$URL" --solo-lectura
+          else
+            node scripts/smoke-test.mjs "$URL" "$ADMIN_PASSWORD"
+          fi

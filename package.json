@@ -1,0 +1,27 @@
+{
+  "name": "macai-menu",
+  "version": "1.0.0",
+  "description": "Menú digital y sistema de pedidos para negocio de comida saludable, con panel de administración y API.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "cargar-menu": "node --env-file-if-exists=.env scripts/cargar-menu.mjs",
+    "test": "node scripts/smoke-test.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1166.0",
+    "@aws-sdk/client-s3": "^3.1166.0",
+    "@aws-sdk/lib-dynamodb": "^3.1166.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
