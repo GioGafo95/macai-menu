@@ -40,6 +40,8 @@ Con poco tráfico (cientos de pedidos al mes y el panel abierto varias horas al 
 
 Lo que más consume es el panel de admin abierto (revisa pedidos nuevos cada 10 s). Aun así queda dentro de la capa gratuita.
 
+El **mapa de entrega** también es gratis: usa OpenStreetMap (mapa y búsqueda de direcciones con Nominatim) y OSRM (distancia por calle). Son servicios públicos pensados para poco tráfico, como el de esta app; si OSRM no responde, el envío se calcula con la distancia en línea recta × 1.3.
+
 Opcional: una **alerta de presupuesto** (gratis) que te manda un correo si el mes va a pasar de $5 USD (paso 2).
 
 ---

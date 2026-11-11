@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { store, ConflictError } from './store/index.js';
+import { DEFAULT_TIERS } from './distance.js';
 
 export { store };
 
@@ -15,11 +16,17 @@ const DEFAULTS = {
   store_open: '1',
   closed_message: 'Por ahora estamos cerrados. ¡Vuelve pronto!',
   delivery_enabled: '1',
+  // 'distance' = costo por km desde el negocio (mapa) · 'zones' = zonas o costo fijo
+  delivery_mode: 'distance',
+  // Calle General Ángel Flores, Centro, Los Mochis (ajustable desde el panel)
+  store_lat: '25.794786',
+  store_lng: '-108.992708',
+  delivery_tiers: DEFAULT_TIERS,
   delivery_flat_fee: '30',
   free_delivery_over: '0',
   min_order: '0',
   pickup_enabled: '1',
-  pickup_address: '',
+  pickup_address: 'Calle General Ángel Flores 14, Centro, 81200 Los Mochis, Sin.',
   cash_enabled: '1',
   transfer_enabled: '1',
   bank_info: 'Banco: \nTitular: \nCLABE: \nConcepto: tu número de pedido',
@@ -49,7 +56,7 @@ export const PRIVATE_KEYS = new Set(['session_secret', 'admin_password_hash']);
 export const PUBLIC_KEYS = [
   'business_name', 'tagline', 'whatsapp_number', 'currency', 'locale', 'estimated_time',
   'store_open', 'closed_message', 'delivery_enabled', 'delivery_flat_fee', 'free_delivery_over',
-  'min_order', 'pickup_enabled', 'pickup_address', 'cash_enabled', 'transfer_enabled', 'bank_info',
+  'delivery_mode', 'store_lat', 'store_lng', 'delivery_tiers', 'min_order', 'pickup_enabled', 'pickup_address', 'cash_enabled', 'transfer_enabled', 'bank_info',
 ];
 
 export const EDITABLE_KEYS = Object.keys(DEFAULTS).filter(

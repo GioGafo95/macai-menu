@@ -1,4 +1,5 @@
 import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor } from './common.js';
+import { createMap, searchAddress, reverseAddress, currentPosition } from './map.js';
 
 const CART_KEY = 'macai_cart';
 const CUSTOMER_KEY = 'macai_customer';
@@ -8,7 +9,7 @@ let menu = null;          // respuesta de /api/public/menu
 let S = {};               // ajustes públicos
 let cart = store.get(CART_KEY, []);
 const checkout = Object.assign(
-  { customer_name: '', customer_phone: '', address: '', address_ref: '', zone_id: '', fulfillment: '', payment_method: '', cash_amount: '', notes: '' },
+  { customer_name: '', customer_phone: '', address: '', address_ref: '', zone_id: '', location: null, fulfillment: '', payment_method: '', cash_amount: '', notes: '' },
   store.get(CUSTOMER_KEY, {}),
   { cash_amount: '', notes: '' },
 );
@@ -341,10 +342,15 @@ function renderCartBar() {
 }
 $('#open-cart').addEventListener('click', () => openCart());
 
+const byDistance = () => S.delivery_mode === 'distance';
+const storePoint = () => ({ lat: Number(S.store_lat), lng: Number(S.store_lng) });
+let quote = null; // cotización del envío por distancia (la última que dio el servidor)
+
 function deliveryFee(sub) {
   if (checkout.fulfillment !== 'delivery') return 0;
   const freeOver = Number(S.free_delivery_over) || 0;
   if (freeOver > 0 && sub >= freeOver) return 0;
+  if (byDistance()) return quote?.available ? quote.fee : null; // null = falta marcar ubicación
   if (menu.zones.length) {
     const z = menu.zones.find((x) => x.id === Number(checkout.zone_id));
     return z ? z.fee : null; // null = falta elegir zona
@@ -447,7 +453,22 @@ function openCheckout() {
       </div>
 
       <div data-delivery>
-        ${menu.zones.length ? `
+        ${byDistance() ? `
+          <div class="field">
+            <span class="label">📍 ¿A dónde te lo llevamos?</span>
+            <div class="search-row">
+              <input class="input" id="c-search" type="search" enterkeyhint="search" autocomplete="off" placeholder="Busca tu calle y colonia">
+              <button type="button" class="btn btn-light" data-search>Buscar</button>
+            </div>
+            <div class="search-results hidden" data-results></div>
+            <div class="map-box" data-map><div class="map-loading">Cargando mapa…</div></div>
+            <div class="map-actions">
+              <button type="button" class="link-btn" data-locate>🎯 Usar mi ubicación actual</button>
+              <span class="muted small">o toca el mapa / arrastra el pin 🏠</span>
+            </div>
+            <div class="quote-box hidden" data-quote role="status"></div>
+          </div>` : ''}
+        ${!byDistance() && menu.zones.length ? `
           <div class="field">
             <label for="c-zone">Zona / colonia</label>
             <select class="input" id="c-zone" name="zone_id">
@@ -503,7 +524,7 @@ function openCheckout() {
     store.set(CUSTOMER_KEY, {
       customer_name: checkout.customer_name, customer_phone: checkout.customer_phone,
       address: checkout.address, address_ref: checkout.address_ref, zone_id: checkout.zone_id,
-      fulfillment: checkout.fulfillment, payment_method: checkout.payment_method,
+      location: checkout.location, fulfillment: checkout.fulfillment, payment_method: checkout.payment_method,
     });
   }
 
@@ -519,7 +540,7 @@ function openCheckout() {
     if (feeLabel) {
       const freeOver = Number(S.free_delivery_over) || 0;
       feeLabel.textContent = freeOver > 0 && subtotal() >= freeOver ? '¡Envío gratis!'
-        : menu.zones.length ? 'Costo según zona' : `Envío ${money(S.delivery_flat_fee)}`;
+        : byDistance() ? 'Según distancia' : menu.zones.length ? 'Costo según zona' : `Envío ${money(S.delivery_flat_fee)}`;
     }
 
     const sub = subtotal();
@@ -527,20 +548,112 @@ function openCheckout() {
     const total = sub + (fee || 0);
     $('[data-totals]', sheet).innerHTML = `
       <div class="row"><span>Subtotal</span><span>${money(sub)}</span></div>
-      ${checkout.fulfillment === 'delivery' ? `<div class="row"><span>Envío</span><span>${fee === null ? '<span class="muted">Elige tu zona</span>' : fee > 0 ? money(fee) : 'Gratis'}</span></div>` : ''}
+      ${checkout.fulfillment === 'delivery' ? `<div class="row"><span>Envío</span><span>${fee === null ? `<span class="muted">${byDistance() ? 'Marca tu ubicación' : 'Elige tu zona'}</span>` : fee > 0 ? money(fee) : 'Gratis'}</span></div>` : ''}
       <div class="row total"><span>Total</span><span>${money(total)}</span></div>
       ${Number(S.free_delivery_over) > 0 && checkout.fulfillment === 'delivery' && sub < Number(S.free_delivery_over)
         ? `<p class="muted small">Agrega ${money(Number(S.free_delivery_over) - sub)} más y tu envío es gratis.</p>` : ''}`;
     $('[data-submit]', sheet).textContent = `Confirmar pedido · ${money(total)}`;
+    if (byDistance() && checkout.fulfillment === 'delivery') ensureMap();
+  }
+
+  /* ---------- Mapa (envío por distancia) ---------- */
+  let picker = null, mapStarting = false, quoteSeq = 0, autoAddress = '';
+
+  async function ensureMap() {
+    if (picker) { picker.refresh(); return; }
+    if (mapStarting) return;
+    mapStarting = true;
+    try {
+      picker = await createMap($('[data-map]', sheet), {
+        store: storePoint(), pin: checkout.location, onPick: pick, storeLabel: S.business_name,
+      });
+      $('.map-loading', sheet)?.remove();
+      if (checkout.location) requestQuote(checkout.location);
+    } catch (e) {
+      $('[data-map]', sheet).innerHTML = `<div class="map-loading">${esc(e.message)}</div>`;
+    } finally { mapStarting = false; }
+  }
+
+  function pick(point) {
+    checkout.location = point;
+    sync();
+    requestQuote(point);
+    fillAddress(point);
+  }
+
+  async function fillAddress(point) {
+    const ta = $('#c-address', sheet);
+    if (ta.value.trim() && ta.value !== autoAddress) return; // ya la escribió el cliente
+    const text = await reverseAddress(point);
+    if (!text || (ta.value.trim() && ta.value !== autoAddress)) return;
+    autoAddress = ta.value = text;
+    sync();
+  }
+
+  async function requestQuote(point) {
+    const seq = ++quoteSeq;
+    const box = $('[data-quote]', sheet);
+    box.className = 'quote-box';
+    box.textContent = 'Calculando envío…';
+    quote = null;
+    update();
+    try {
+      const q = await api('/api/public/delivery-quote', { method: 'POST', body: point });
+      if (seq !== quoteSeq) return;
+      quote = q;
+      box.className = `quote-box ${q.available ? 'ok' : 'warn'}`;
+      box.innerHTML = q.available
+        ? `🛵 Estás a <strong>${q.distance_km} km</strong> · Envío <strong>${money(q.fee)}</strong>`
+        : esc(q.message);
+    } catch (e) {
+      if (seq !== quoteSeq) return;
+      box.className = 'quote-box warn';
+      box.textContent = e.message;
+    }
+    update();
+  }
+
+  async function doSearch() {
+    const input = $('#c-search', sheet);
+    const q = input.value.trim();
+    const list = $('[data-results]', sheet);
+    if (q.length < 3) { input.focus(); return; }
+    list.classList.remove('hidden');
+    list.innerHTML = '<div class="muted small">Buscando…</div>';
+    try {
+      const results = await searchAddress(q, storePoint());
+      list.innerHTML = results.length
+        ? results.map((r, i) => `<button type="button" data-result="${i}">📍 ${esc(r.label)}</button>`).join('')
+        : '<div class="muted small">No encontramos esa dirección. Prueba con calle y colonia, o toca el mapa.</div>';
+      list._results = results;
+    } catch (e) {
+      list.innerHTML = `<div class="muted small">${esc(e.message)}</div>`;
+    }
   }
 
   form.addEventListener('input', () => { sync(); update(); });
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+  $('#c-search', sheet)?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+  });
   sheet.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;
     if (t.dataset.ful) { checkout.fulfillment = t.dataset.ful; sync(); update(); }
     if (t.dataset.pay) { checkout.payment_method = t.dataset.pay; sync(); update(); }
+    if ('search' in t.dataset) doSearch();
+    if (t.dataset.result) {
+      const list = $('[data-results]', sheet);
+      const r = list._results?.[Number(t.dataset.result)];
+      list.classList.add('hidden');
+      if (r) picker?.set(r);
+    }
+    if ('locate' in t.dataset) {
+      t.disabled = true;
+      t.textContent = '🎯 Buscando tu ubicación…';
+      currentPosition().then((p) => picker?.set(p)).catch((err) => toast(err.message, 4000))
+        .finally(() => { t.disabled = false; t.textContent = '🎯 Usar mi ubicación actual'; });
+    }
     if ('back' in t.dataset) openCart();
     if ('submit' in t.dataset) submit();
   });
@@ -562,7 +675,11 @@ function openCheckout() {
     if (checkout.customer_name.trim().length < 2) return fail('Escribe tu nombre', 'customer_name');
     if (checkout.customer_phone.replace(/\D/g, '').length < 8) return fail('Escribe un teléfono válido', 'customer_phone');
     if (checkout.fulfillment === 'delivery') {
-      if (menu.zones.length && !checkout.zone_id) return fail('Elige tu zona de entrega', 'zone_id');
+      if (byDistance()) {
+        if (!checkout.location) return fail('Marca en el mapa a dónde te lo llevamos');
+        if (!quote) return fail('Espera a que calculemos el costo del envío');
+        if (!quote.available) return fail(quote.message);
+      } else if (menu.zones.length && !checkout.zone_id) return fail('Elige tu zona de entrega', 'zone_id');
       if (checkout.address.trim().length < 5) return fail('Escribe tu dirección completa', 'address');
     }
     if (!checkout.payment_method) return fail('Elige un método de pago');
@@ -580,6 +697,7 @@ function openCheckout() {
           customer_phone: checkout.customer_phone,
           fulfillment: checkout.fulfillment,
           zone_id: checkout.zone_id ? Number(checkout.zone_id) : null,
+          location: byDistance() ? checkout.location : null,
           address: checkout.address,
           address_ref: checkout.address_ref,
           payment_method: checkout.payment_method,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getSettings, getCatalog, bySort, PUBLIC_KEYS } from '../data.js';
-import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, isAvailable } from '../orders.js';
+import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, isAvailable, byDistance } from '../orders.js';
+import { quoteDelivery, parsePoint } from '../distance.js';
 import { notifyNewOrder } from '../notify.js';
 import { HttpError, rateLimit, settle, baseUrlOf } from '../util.js';
 
@@ -39,9 +40,23 @@ r.get('/menu', async (req, res) => {
   res.json({ settings, categories, products, groups, zones: activeZones(cat) });
 });
 
+// Costo de envío según el punto que el cliente marca en el mapa
+r.post('/delivery-quote', rateLimit({ windowMs: 10 * 60_000, max: 60, message: 'Demasiadas consultas. Intenta en unos minutos.' }), async (req, res) => {
+  const s = await getSettings();
+  if (!byDistance(s)) throw new HttpError(400, 'El envío no se calcula por distancia');
+  res.set('Cache-Control', 'no-store');
+  res.json(await quoteDelivery(req.body, s));
+});
+
 r.post('/orders', rateLimit({ windowMs: 10 * 60_000, max: 15, message: 'Has enviado muchos pedidos seguidos. Intenta en unos minutos o escríbenos por WhatsApp.' }), async (req, res) => {
   const [s, cat] = await Promise.all([getSettings(), getCatalog()]);
-  const order = await createOrder(buildOrder(req.body, s, cat));
+  const body = req.body || {};
+  let quote = null;
+  if (body.fulfillment !== 'pickup' && byDistance(s) && s.delivery_enabled === '1') {
+    const point = parsePoint(body.location);
+    if (point) quote = { ...(await quoteDelivery(point, s)), ...point };
+  }
+  const order = await createOrder(buildOrder(body, s, cat, { quote }));
   const baseUrl = s.public_url || baseUrlOf(req);
 
   let whatsapp_url = null;

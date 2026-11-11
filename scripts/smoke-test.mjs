@@ -60,6 +60,16 @@ const extras = groups.filter((g) => g.min_select === 0).flatMap((g) => g.options
 const toppings = [...required, ...extras.map((o) => o.id)];
 const expected = bowl.price + (extras.length > bowl.included_count ? extras.at(-1).price : 0);
 
+// Envío por distancia: cotiza un punto cercano al negocio y uno muy lejano
+const S = menu.data.settings;
+if (S.delivery_mode === 'distance') {
+  const near = { lat: Number(S.store_lat) + 0.004, lng: Number(S.store_lng) + 0.004 };
+  const q = await call('/api/public/delivery-quote', { method: 'POST', body: near });
+  check(q.status === 200 && q.data.available && q.data.fee > 0, `Envío por distancia: ${q.data.distance_km} km → $${q.data.fee} (${q.data.method})`);
+  const far = await call('/api/public/delivery-quote', { method: 'POST', body: { lat: Number(S.store_lat) + 1, lng: Number(S.store_lng) } });
+  check(far.status === 200 && far.data.available === false, 'Envío por distancia: rechaza direcciones fuera de rango');
+}
+
 if (readOnly) {
   const noKey = await call('/api/v1/orders');
   check(noKey.status === 401, 'API v1 protegida con key');

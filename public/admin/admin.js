@@ -1,4 +1,5 @@
 import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor } from '/common.js';
+import { createMap, searchAddress } from '/map.js';
 
 /* ================================ Constantes ================================ */
 
@@ -295,9 +296,9 @@ function orderCard(o, flash) {
         <span class="contact-links"><a href="tel:${esc(phone)}">📞 ${esc(o.customer.phone)}</a>
         <a href="https://wa.me/${esc(waPhone.length === 10 ? '52' + waPhone : waPhone)}" target="_blank" rel="noopener">WhatsApp</a></span></div></div>
       ${o.fulfillment === 'delivery'
-        ? `<div class="row"><span>🛵</span><div>${esc(o.address)}${o.zone ? ` <span class="muted">(${esc(o.zone.name)})</span>` : ''}
+        ? `<div class="row"><span>🛵</span><div>${esc(o.address)}${o.zone ? ` <span class="muted">(${esc(o.zone.name)})</span>` : ''}${o.location ? ` <span class="muted">· ${o.location.distance_km} km</span>` : ''}
             ${o.address_ref ? `<div class="muted small">${esc(o.address_ref)}</div>` : ''}
-            <a class="small" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}" target="_blank" rel="noopener">Ver en mapa</a></div></div>`
+            <a class="small" href="https://www.google.com/maps/search/?api=1&query=${o.location ? `${o.location.lat},${o.location.lng}` : encodeURIComponent(o.address)}" target="_blank" rel="noopener">${o.location ? '📍 Ver ubicación en el mapa' : 'Ver en mapa'}</a></div></div>`
         : '<div class="row"><span>🏪</span><div><strong>Recoge en tienda</strong></div></div>'}
       <div class="order-items">
         ${o.items.map((i) => `
@@ -396,6 +397,8 @@ function fieldHtml(f, value) {
   const hint = f.hint ? `<div class="hint">${f.hint}</div>` : '';
   const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : '';
   switch (f.type) {
+    case 'hidden':
+      return `<input type="hidden" name="${f.name}" value="${esc(value ?? '')}">`;
     case 'checkbox':
       return `<label class="check-field"><input type="checkbox" name="${f.name}" ${value === true || value === '1' || value === 1 ? 'checked' : ''}> <span>${esc(f.label)}</span></label>${hint}`;
     case 'textarea':
@@ -758,7 +761,11 @@ async function renderDelivery() {
       fields: [
         { name: 'delivery_enabled', label: 'Ofrecer envío a domicilio', type: 'checkbox' },
         { name: 'pickup_enabled', label: 'Permitir recoger en tienda', type: 'checkbox' },
-        { name: 'delivery_flat_fee', label: 'Costo de envío fijo', type: 'number', step: '0.5', hint: 'Se usa solo si no tienes zonas activas.' },
+        { name: 'delivery_mode', label: '¿Cómo se cobra el envío?', type: 'select', options: [
+          { value: 'distance', label: '📍 Por distancia (el cliente marca su ubicación en un mapa)' },
+          { value: 'zones', label: '🗺️ Por zonas o costo fijo' },
+        ] },
+        { name: 'delivery_flat_fee', label: 'Costo de envío fijo', type: 'number', step: '0.5', hint: 'Solo en modo "por zonas", si no tienes zonas activas.' },
         { name: 'free_delivery_over', label: 'Envío gratis a partir de', type: 'number', step: '1', hint: '0 = desactivado.' },
         { name: 'min_order', label: 'Pedido mínimo', type: 'number', step: '1', hint: '0 = sin mínimo.' },
         { name: 'estimated_time', label: 'Tiempo estimado', placeholder: 'Ej. 30 a 45 min' },
@@ -780,12 +787,36 @@ async function renderDelivery() {
     onDelete: z ? async () => { await A(`/zones/${z.id}`, { method: 'DELETE' }); renderDelivery(); } : null,
   });
 
+  defs.push({
+    id: 'distance', title: '📍 Envío por distancia',
+    desc: 'Se mide la distancia por calle desde tu negocio hasta el punto que marca el cliente, y se cobra según estas tarifas.',
+    fields: [
+      { name: 'delivery_tiers', label: 'Tarifas (una por renglón: km máximos = costo)', type: 'textarea', rows: 6,
+        placeholder: '2 = 35\n4 = 40\n6 = 45\n8 = 50\n10 = 55',
+        hint: 'Ej. "2 = 35" → hasta 2 km cuesta $35. Más allá del último rango (ej. ejidos) no se acepta el envío y se le pide al cliente que te escriba por WhatsApp.' },
+      { name: 'store_lat', type: 'hidden' },
+      { name: 'store_lng', type: 'hidden' },
+    ],
+    extra: `
+      <div class="field" style="margin-top:14px">
+        <span class="label">Ubicación de tu negocio</span>
+        <div class="hint">Arrastra el pin 🥣 o toca el mapa en el punto exacto de tu local. Después presiona Guardar.</div>
+        <div class="search-row" style="margin-top:8px">
+          <input class="input" id="store-search" type="search" placeholder="Buscar dirección">
+          <button type="button" class="btn btn-light" data-store-search>Buscar</button>
+        </div>
+        <div class="map-box" data-store-map><div class="map-loading">Cargando mapa…</div></div>
+        <div class="muted small" data-store-coords style="margin-top:6px"></div>
+      </div>`,
+  });
+
   view.innerHTML = `
     <div class="view-head"><h2>Envío</h2></div>
     ${settingsPanel(defs[0])}
+    ${settingsPanel(defs[1])}
     <div class="panel">
       <div class="panel-head"><h3>Zonas de envío</h3><button class="btn btn-light btn-sm" data-new-zone>+ Nueva zona</button></div>
-      <p class="muted">Si tienes zonas activas, el cliente elige la suya y se cobra su costo. Si no tienes ninguna, se cobra el costo fijo.</p>
+      <p class="muted">Solo se usan en modo "por zonas". Si tienes zonas activas, el cliente elige la suya y se cobra su costo; si no, se cobra el costo fijo.</p>
       ${zones.map((z) => `
         <div class="list-row ${z.active ? '' : 'inactive'}">
           <div class="grow"><div class="name">${esc(z.name)}</div><div class="sub">${z.fee > 0 ? money(z.fee) : 'Gratis'}${z.active ? '' : ' · Inactiva'}</div></div>
@@ -793,8 +824,36 @@ async function renderDelivery() {
         </div>`).join('') || '<p class="muted small">Sin zonas: se usa el costo fijo.</p>'}
     </div>`;
   wireSettings(defs);
+  wireStoreMap();
   $('[data-new-zone]', view).addEventListener('click', () => editZone(null));
   $$('[data-edit-zone]', view).forEach((b) => b.addEventListener('click', () => editZone(zones.find((z) => z.id === Number(b.dataset.editZone)))));
+}
+
+async function wireStoreMap() {
+  const form = $('[data-settings="distance"]', view);
+  const coords = $('[data-store-coords]', form);
+  const point = () => ({ lat: Number(form.elements.store_lat.value), lng: Number(form.elements.store_lng.value) });
+  const show = () => { const p = point(); coords.textContent = `Coordenadas: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`; };
+  show();
+  try {
+    const picker = await createMap($('[data-store-map]', form), {
+      store: null, pin: point(), pinEmoji: '🥣',
+      onPick: (p) => { form.elements.store_lat.value = p.lat; form.elements.store_lng.value = p.lng; show(); },
+    });
+    $('.map-loading', form)?.remove();
+    const search = async () => {
+      const q = $('#store-search', form).value.trim();
+      if (q.length < 3) return;
+      try {
+        const [r] = await searchAddress(q, point());
+        if (r) picker.set(r); else toast('No encontramos esa dirección; mueve el pin a mano.', 4000);
+      } catch (e) { toast(e.message, 4000); }
+    };
+    $('[data-store-search]', form).addEventListener('click', search);
+    $('#store-search', form).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+  } catch (e) {
+    $('[data-store-map]', form).innerHTML = `<div class="map-loading">${esc(e.message)}</div>`;
+  }
 }
 
 /* ================================= Ajustes ================================= */

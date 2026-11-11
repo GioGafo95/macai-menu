@@ -7,6 +7,7 @@ import {
 import { requireAdmin, verifyPassword, setSessionCookie, clearSessionCookie, changePassword } from '../auth.js';
 import { listOrders, updateOrder, getOrder, salesSummary, STATUSES, ACTIVE_STATUSES } from '../orders.js';
 import { notifyOrderUpdated, sendTest } from '../notify.js';
+import { parseTiers } from '../distance.js';
 import { HttpError, reqStr, str, int, num, bool, parseDate, rateLimit, isSafeImageUrl, settle } from '../util.js';
 
 const r = Router();
@@ -335,6 +336,16 @@ r.put('/settings', async (req, res) => {
   for (const k of EDITABLE_KEYS) {
     if (b[k] === undefined) continue;
     patch[k] = k === 'webhook_url' || k === 'public_url' ? url(k) : str(b[k], 2000);
+  }
+  if (patch.delivery_tiers !== undefined) {
+    patch.delivery_tiers = parseTiers(patch.delivery_tiers, { strict: true }).map((t) => `${t.km} = ${t.fee}`).join('\n');
+  }
+  if (patch.delivery_mode !== undefined && !['distance', 'zones'].includes(patch.delivery_mode)) patch.delivery_mode = 'distance';
+  for (const k of ['store_lat', 'store_lng']) {
+    if (patch[k] === undefined) continue;
+    const n = Number(patch[k]);
+    if (!Number.isFinite(n) || Math.abs(n) > (k === 'store_lat' ? 90 : 180)) throw new HttpError(400, 'Ubicación del negocio inválida');
+    patch[k] = String(Math.round(n * 1e6) / 1e6);
   }
   res.json(publicView(await updateSettings(patch)));
 });

@@ -20,15 +20,25 @@ export const FULFILLMENT_LABELS = { delivery: 'Envío a domicilio', pickup: 'Rec
 /* Crear pedido: valida todo y calcula precios en el servidor          */
 /* ------------------------------------------------------------------ */
 
+/** Enlace de Google Maps al punto que marcó el cliente (o a su dirección escrita). */
+export function mapsLink(o) {
+  return o.location
+    ? `https://www.google.com/maps/search/?api=1&query=${o.location.lat},${o.location.lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address || '')}`;
+}
+
 export function activeZones(cat) {
   return cat.zones.filter((z) => z.active).sort(bySort).map(({ id, name, fee }) => ({ id, name, fee }));
 }
 
-export function deliveryFeeFor(subtotal, zone, s) {
+export function deliveryFeeFor(subtotal, zone, s, quote = null) {
   const freeOver = Number(s.free_delivery_over) || 0;
   if (freeOver > 0 && subtotal >= freeOver) return 0;
+  if (quote) return round2(quote.fee);
   return round2(zone ? zone.fee : Number(s.delivery_flat_fee) || 0);
 }
+
+export const byDistance = (s) => s.delivery_mode === 'distance';
 
 /**
  * "Incluye N opciones de hasta $X": descuenta hasta X a las N opciones con costo más caras.
@@ -55,7 +65,10 @@ export function isAvailable(p, cat) {
   return !c || c.active;
 }
 
-export function buildOrder(input, s, cat) {
+/**
+ * quote: cotización por distancia calculada en el servidor (quoteDelivery) cuando el envío es por km.
+ */
+export function buildOrder(input, s, cat, { quote = null } = {}) {
   if (s.store_open !== '1') throw new HttpError(409, s.closed_message || 'Por ahora no estamos recibiendo pedidos.');
   input = input || {};
 
@@ -115,7 +128,7 @@ export function buildOrder(input, s, cat) {
   if (customer_phone.replace(/\D/g, '').length < 8) throw new HttpError(400, 'Escribe un teléfono válido (al menos 8 dígitos)');
 
   const fulfillment = input.fulfillment === 'pickup' ? 'pickup' : 'delivery';
-  let address = null, address_ref = null, zone = null, delivery_fee = 0;
+  let address = null, address_ref = null, zone = null, delivery_fee = 0, location = null;
   if (fulfillment === 'pickup') {
     if (s.pickup_enabled !== '1') throw new HttpError(400, 'La opción de recoger no está disponible');
   } else {
@@ -123,12 +136,18 @@ export function buildOrder(input, s, cat) {
     address = str(input.address, 300);
     if (address.length < 5) throw new HttpError(400, 'Escribe tu dirección completa');
     address_ref = str(input.address_ref, 200) || null;
-    const zones = activeZones(cat);
-    if (zones.length) {
-      zone = zones.find((z) => z.id === Number(input.zone_id));
-      if (!zone) throw new HttpError(400, 'Elige tu zona de entrega');
+    if (byDistance(s)) {
+      if (!quote) throw new HttpError(400, 'Marca tu ubicación en el mapa');
+      if (!quote.available) throw new HttpError(400, quote.message);
+      location = { lat: quote.lat, lng: quote.lng, distance_km: quote.distance_km };
+    } else {
+      const zones = activeZones(cat);
+      if (zones.length) {
+        zone = zones.find((z) => z.id === Number(input.zone_id));
+        if (!zone) throw new HttpError(400, 'Elige tu zona de entrega');
+      }
     }
-    delivery_fee = deliveryFeeFor(subtotal, zone, s);
+    delivery_fee = deliveryFeeFor(subtotal, zone, s, byDistance(s) ? quote : null);
   }
 
   const total = round2(subtotal + delivery_fee);
@@ -151,6 +170,7 @@ export function buildOrder(input, s, cat) {
     customer: { name: customer_name, phone: customer_phone },
     fulfillment, address, address_ref,
     zone: zone ? { id: zone.id, name: zone.name } : null,
+    location,
     delivery_fee, subtotal, total, payment_method, cash_amount,
     notes: str(input.notes, 500) || null,
     items,
@@ -191,6 +211,7 @@ export function present(o) {
     address: o.address ?? null,
     address_ref: o.address_ref ?? null,
     zone: o.zone ?? null,
+    location: o.location ?? null,
     payment_method: o.payment_method,
     cash_amount: o.cash_amount ?? null,
     change_due: o.cash_amount ? round2(o.cash_amount - o.total) : null,
@@ -343,9 +364,10 @@ export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}
   }
   L.push(`Cliente: ${o.customer.name} · ${o.customer.phone}`);
   if (o.fulfillment === 'delivery') {
-    L.push(`Envío a domicilio${o.zone ? ` (${o.zone.name})` : ''}`);
+    L.push(`Envío a domicilio${o.zone ? ` (${o.zone.name})` : ''}${o.location ? ` · ${o.location.distance_km} km` : ''}`);
     L.push(`Dirección: ${o.address}`);
     if (o.address_ref) L.push(`Referencias: ${o.address_ref}`);
+    if (o.location) L.push(`Ubicación: ${mapsLink(o)}`);
   } else {
     L.push('Recoge en tienda');
   }

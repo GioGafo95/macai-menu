@@ -301,3 +301,22 @@ textarea.input { resize: vertical; min-height: 70px; }
 .opts-grid .option .opt-name { font-size: .9rem; line-height: 1.25; flex-basis: calc(100% - 28px); }
 .opts-grid .option .opt-price { flex-basis: 100%; padding-left: 26px; font-size: .8rem; }
 .opts-grid .option:has(input:checked) { border-color: var(--cyan); background: var(--cyan-soft); }
+
+/* ---------- Mapa de entrega ---------- */
+.search-row { display: flex; gap: 8px; }
+.search-row .input { flex: 1; min-width: 0; }
+.search-results { display: grid; gap: 4px; margin-top: 8px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.search-results button { text-align: left; background: none; border: 0; padding: 9px 10px; border-radius: 10px; font-size: .9rem; color: var(--text); }
+.search-results button:hover, .search-results button:focus-visible { background: var(--cyan-soft); }
+.map-box { position: relative; z-index: 0; height: 260px; margin-top: 10px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: var(--cyan-soft); }
+.map-loading { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--muted); font-size: .9rem; }
+.map-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 8px; }
+.map-actions .link-btn { color: var(--cyan-ink); font-size: .9rem; }
+.quote-box { margin-top: 10px; padding: 11px 14px; border-radius: 14px; background: var(--cyan-soft); color: var(--navy); font-size: .92rem; }
+.quote-box.ok { background: var(--cyan-soft); }
+.quote-box.warn { background: var(--warn-bg); color: var(--warn); }
+.map-pin { width: 36px; height: 36px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: grid; place-items: center; border: 3px solid #fff; box-shadow: 0 4px 12px rgba(18, 48, 74, .3); }
+.map-pin span { transform: rotate(45deg); font-size: 16px; line-height: 1; }
+.map-pin.home { background: var(--orange); }
+.map-pin.store { background: var(--cyan); }
+.leaflet-container { font-family: var(--font-body); }
