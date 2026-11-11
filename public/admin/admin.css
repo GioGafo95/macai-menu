@@ -162,3 +162,7 @@ details.help ol { padding-left: 20px; margin: 8px 0; }
 .status-badge.s-nuevo { background: var(--orange-soft); color: var(--orange-strong); }
 .topbar .btn-ghost { background: transparent; color: #fff; border-color: rgba(255,255,255,.3); }
 .topbar .btn-ghost:hover { background: rgba(255,255,255,.1); }
+
+.order-driver { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px 0; border-top: 1px dashed var(--line); }
+.order-driver .muted { flex-basis: 100%; }
+.order-driver .btn { flex: 1; min-width: 120px; text-decoration: none; text-align: center; }

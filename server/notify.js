@@ -33,7 +33,13 @@ async function callmebot(s, text) {
   url.searchParams.set('text', text);
   url.searchParams.set('apikey', s.notify_callmebot_apikey);
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT) });
-  return check(res, 'WhatsApp (CallMeBot)');
+  // CallMeBot responde 200/203 incluso con error; el texto dice si el mensaje quedó en cola
+  const body = await res.text().catch(() => '');
+  if (!res.ok || !/queued|sent/i.test(body)) {
+    const msg = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+    throw new Error(`WhatsApp (CallMeBot): ${msg || `HTTP ${res.status}`}`);
+  }
+  return 'WhatsApp (CallMeBot)';
 }
 
 // Twilio: SMS, WhatsApp Business o llamada telefónica (de pago).

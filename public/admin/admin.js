@@ -316,6 +316,12 @@ function orderCard(o, flash) {
         <button class="paid-chip ${o.paid ? 'yes' : 'no'}" data-action="paid" title="Cambiar estado de pago">${o.paid ? '✓ Pagado' : 'Sin pagar'}</button>
       </div>
     </div>
+    ${o.fulfillment === 'delivery' && o.driver_text ? `
+    <div class="order-driver">
+      <span class="muted small">Grupo de repartidores:</span>
+      <button class="btn btn-light btn-sm" data-action="driver-copy" data-text="${esc(o.driver_text)}">📋 Copiar</button>
+      <a class="btn btn-light btn-sm" href="https://wa.me/?text=${encodeURIComponent(o.driver_text)}" target="_blank" rel="noopener">📤 Enviar por WhatsApp</a>
+    </div>` : ''}
     <div class="order-foot">
       ${next ? `<button class="btn btn-sm" data-action="next" data-status="${next}">${NEXT_LABEL[next]}</button>` : ''}
       <select data-action="status" aria-label="Cambiar estado">
@@ -343,6 +349,10 @@ async function patchOrder(id, body) {
 view.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn || btn.tagName === 'SELECT') return;
+  if (btn.dataset.action === 'driver-copy') {
+    copy(btn.dataset.text, '📋 Copiado: pégalo en el grupo de repartidores');
+    return;
+  }
   const id = btn.closest('.order')?.dataset.id;
   if (!id) return;
   btn.disabled = true;
@@ -909,10 +919,12 @@ async function renderSettings() {
           <li>Abre tu bot nuevo y envíale cualquier mensaje.</li>
           <li>Abre <strong>@userinfobot</strong> para ver tu <em>Chat ID</em> (o el de un grupo donde agregues al bot).</li>
           <li>Pega ambos datos aquí, guarda y presiona "Enviar prueba".</li></ol></details>
-        <details class="help"><summary>¿Cómo configuro WhatsApp con CallMeBot? (gratis)</summary><ol>
-          <li>Agrega el número de CallMeBot a tus contactos (lo encuentras en callmebot.com, sección WhatsApp).</li>
-          <li>Envíale el mensaje: <code>I allow callmebot to send me messages</code></li>
-          <li>Te responderá con tu <em>API key</em>. Pega tu número y la key aquí.</li></ol></details>
+        <details class="help"><summary>¿Cómo recibo los pedidos en el WhatsApp de la tienda? (gratis, con CallMeBot)</summary><ol>
+          <li>Desde el celular con el <strong>WhatsApp de la tienda</strong>, entra a <a href="https://www.callmebot.com/blog/free-api-whatsapp-messages/" target="_blank" rel="noopener">callmebot.com</a> y agrega a tus contactos el número que aparece ahí.</li>
+          <li>Envíale por WhatsApp el mensaje: <code>I allow callmebot to send me messages</code></li>
+          <li>En unos minutos te responde con tu <em>API key</em>.</li>
+          <li>Escribe aquí el número de la tienda con código de país (ej. <code>+5216681234567</code>) y la key, guarda y presiona "Enviar prueba".</li></ol>
+          <p class="small">Con cada pedido nuevo te llega un WhatsApp con todo el detalle. En los pedidos a domicilio trae al final el enlace <em>📤 Pasar al grupo de repartidores</em>: tócalo, elige el grupo y envía. También puedes copiar ese mensaje desde el pedido en este panel.</p></details>
         <details class="help"><summary>¿Y Twilio? (de pago: SMS, WhatsApp Business o llamada)</summary>
           <p>Crea una cuenta en twilio.com, compra un número y copia el Account SID y Auth token. La llamada lee en voz alta el número y total del pedido.</p></details>
         <div style="margin-top:12px"><button type="button" class="btn btn-light" data-test-notify>Enviar prueba</button></div>

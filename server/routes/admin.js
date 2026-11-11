@@ -5,7 +5,7 @@ import {
   EDITABLE_KEYS, PRIVATE_KEYS, randomKey,
 } from '../data.js';
 import { requireAdmin, verifyPassword, setSessionCookie, clearSessionCookie, changePassword } from '../auth.js';
-import { listOrders, updateOrder, getOrder, salesSummary, STATUSES, ACTIVE_STATUSES } from '../orders.js';
+import { listOrders, updateOrder, getOrder, salesSummary, formatDriverText, STATUSES, ACTIVE_STATUSES } from '../orders.js';
 import { notifyOrderUpdated, sendTest } from '../notify.js';
 import { parseTiers } from '../distance.js';
 import { HttpError, reqStr, str, int, num, bool, parseDate, rateLimit, isSafeImageUrl, settle } from '../util.js';
@@ -293,23 +293,29 @@ r.get('/orders', async (req, res) => {
   if (q.view === 'active') statuses = ACTIVE_STATUSES;
   else if (q.status) statuses = String(q.status).split(',').filter((x) => STATUSES.includes(x));
   res.set('Cache-Control', 'no-store');
-  res.json(await listOrders({
+  const s = await getSettings();
+  const out = await listOrders({
     from: parseDate(q.from),
     to: parseDate(q.to, true),
     statuses,
     limit: q.limit || 200,
     offset: q.offset,
     sort: q.view === 'active' ? 'asc' : 'desc',
-  }));
+  });
+  out.data = out.data.map((o) => withDriver(o, s));
+  res.json(out);
 });
 
-r.get('/orders/:id', async (req, res) => res.json(must(await getOrder(idOf(req)), 'Pedido')));
+/** Agrega el texto para el grupo de repartidores (botón "Copiar para repartidor" del panel). */
+const withDriver = (o, s) => ({ ...o, driver_text: formatDriverText(o, s) });
+
+r.get('/orders/:id', async (req, res) => res.json(withDriver(must(await getOrder(idOf(req)), 'Pedido'), await getSettings())));
 
 r.patch('/orders/:id', async (req, res) => {
   const b = req.body || {};
   const order = await updateOrder(idOf(req), { status: b.status, paid: b.paid === undefined ? undefined : bool(b.paid) });
   await settle(notifyOrderUpdated(order), 'webhook');
-  res.json(order);
+  res.json(withDriver(order, await getSettings()));
 });
 
 r.get('/summary', async (req, res) => {

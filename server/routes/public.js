@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getSettings, getCatalog, bySort, PUBLIC_KEYS } from '../data.js';
-import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, isAvailable, byDistance } from '../orders.js';
+import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, formatDriverText, isAvailable, byDistance } from '../orders.js';
 import { quoteDelivery, parsePoint } from '../distance.js';
 import { notifyNewOrder } from '../notify.js';
 import { HttpError, rateLimit, settle, baseUrlOf } from '../util.js';
@@ -65,6 +65,15 @@ r.post('/orders', rateLimit({ windowMs: 10 * 60_000, max: 15, message: 'Has envi
 
   await settle(notifyNewOrder(order, baseUrl), 'notificación');
   res.status(201).json({ id: order.id, token: order.token, total: order.total, whatsapp_url });
+});
+
+// Enlace del mensaje de WhatsApp a la tienda: abre WhatsApp con el texto para el grupo de repartidores
+r.get('/orders/:token/repartidor', async (req, res) => {
+  const order = await getOrderByToken(req.params.token);
+  if (!order) throw new HttpError(404, 'Pedido no encontrado');
+  const s = await getSettings();
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, `https://wa.me/?text=${encodeURIComponent(formatDriverText(order, s))}`);
 });
 
 r.get('/orders/:token', async (req, res) => {

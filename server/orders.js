@@ -354,6 +354,42 @@ export async function salesSummary({ from, to } = {}) {
 /* Texto para notificaciones / WhatsApp                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Mensaje para el grupo de repartidores (WhatsApp): solo lo que necesitan para entregar y cobrar.
+ * Usa *negritas* de WhatsApp.
+ */
+export function formatDriverText(o, s) {
+  const m = (n) => money(n, s);
+  const L = [`🛵 *PEDIDO #${o.id}* · ${s.business_name || ''}`.trim(), ''];
+  L.push(`👤 *Nombre:* ${o.customer.name}`);
+  L.push(`📱 *Celular:* ${o.customer.phone}`);
+  if (o.fulfillment === 'delivery') {
+    L.push(`📍 *Dirección:* ${o.address}`);
+    if (o.address_ref) L.push(`🏠 *Referencias:* ${o.address_ref}`);
+    if (o.zone) L.push(`🗺️ *Zona:* ${o.zone.name}`);
+    if (o.location) L.push(`📏 *Distancia:* ${o.location.distance_km} km`);
+    L.push(`🧭 *Ubicación:* ${mapsLink(o)}`);
+  } else {
+    L.push('🏪 *Recoge en tienda*');
+  }
+  L.push(`📦 *Lleva:* ${o.items.map((it) => `${it.quantity}x ${it.name}`).join(', ')}`);
+  if (o.paid) {
+    L.push(`✅ *Ya pagado* (${PAYMENT_LABELS[o.payment_method].toLowerCase()}) · no cobrar`);
+  } else if (o.payment_method === 'cash') {
+    let pay = `💵 *Cobrar:* ${m(o.total)} en efectivo`;
+    if (o.fulfillment === 'delivery' && o.delivery_fee) pay += ` (incluye envío ${m(o.delivery_fee)})`;
+    L.push(pay);
+    if (o.cash_amount) L.push(`💱 *Paga con:* ${m(o.cash_amount)} → llevar *${m(o.change_due ?? round2(o.cash_amount - o.total))}* de cambio`);
+  } else {
+    L.push(`🏦 *Transferencia:* ${m(o.total)} · confirmar el pago antes de entregar`);
+  }
+  if (o.notes) L.push(`📝 *Notas:* ${o.notes}`);
+  return L.join('\n');
+}
+
+/** Enlace corto que abre WhatsApp con el mensaje para repartidores listo para reenviar. */
+export const driverShareLink = (o, baseUrl) => (baseUrl && o.token ? `${baseUrl}/api/public/orders/${o.token}/repartidor` : '');
+
 export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}) {
   const m = (n) => money(n, s);
   const L = [];
@@ -388,6 +424,7 @@ export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}
   if (baseUrl) {
     L.push('');
     L.push(forCustomer ? `Seguimiento: ${baseUrl}/pedido.html?t=${o.token}` : `Panel: ${baseUrl}/admin/`);
+    if (!forCustomer && o.fulfillment === 'delivery' && o.token) L.push(`📤 Pasar al grupo de repartidores: ${driverShareLink(o, baseUrl)}`);
   }
   return L.join('\n');
 }
