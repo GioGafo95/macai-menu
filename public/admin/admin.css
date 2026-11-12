@@ -249,3 +249,26 @@ select.recipe-unit { padding: 10px 6px; }
   .cost-bar { width: 26%; }
   .cost-rank-n { width: 92px; font-size: .8rem; }
 }
+
+/* Compras */
+.pur-month { max-width: 220px; text-transform: capitalize; }
+.pur-item { max-width: 320px; margin-bottom: 8px; }
+.pur-summary { font-size: .92rem; margin: 4px 0 8px; }
+.pur-chart { position: relative; width: 100%; overflow: hidden; }
+.pur-chart svg { display: block; }
+.pc-grid { stroke: #ece7e1; stroke-width: 1; }
+.pc-ax { fill: var(--muted); font-size: 11px; }
+.pc-line { fill: none; stroke: var(--navy); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pc-range { stroke: var(--navy); stroke-opacity: .25; stroke-width: 6; stroke-linecap: round; }
+.pc-dot { fill: var(--navy); stroke: #fff; stroke-width: 2; }
+.pc-cross { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.pc-tip { position: absolute; top: 4px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 10px; padding: 6px 10px; font-size: .8rem; pointer-events: none; white-space: nowrap; }
+.pur-var .cost-tr { grid-template-columns: 1fr 86px 86px 78px; }
+.pur-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.pur-row:last-child { border-bottom: 0; }
+.pur-row .grow { flex: 1; min-width: 0; }
+.pur-date { width: 48px; flex-shrink: 0; font-weight: 700; color: var(--muted); font-size: .8rem; }
+.pur-money { text-align: right; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .pur-var .cost-tr { grid-template-columns: 1fr 72px 72px 64px; }
+}

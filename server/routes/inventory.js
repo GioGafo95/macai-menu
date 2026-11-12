@@ -5,6 +5,7 @@ import {
 } from '../inventory.js';
 import { productCosts, salesProfit } from '../costing.js';
 import { listOrders } from '../orders.js';
+import { buildPurchase, savePurchase, listPurchases, deletePurchase, cleanDate, todayLocal, lastMonths, baseUnit } from '../purchases.js';
 import { notifyLowStock } from '../notify.js';
 import { HttpError, str, settle } from '../util.js';
 
@@ -85,17 +86,29 @@ r.post('/items/:id/movements', async (req, res) => {
   const totalCost = b.total_cost === undefined || b.total_cost === '' ? null : Number(b.total_cost);
   if (totalCost !== null && (!Number.isFinite(totalCost) || totalCost < 0)) throw new HttpError(400, 'Costo inválido');
 
+  // Compra: fecha (puede ser anterior), unidad en que se compró, proveedor y si se suma a la existencia
+  const date = type === 'compra' ? cleanDate(b.date) : null;
+  const addStock = type !== 'compra' || b.add_stock === undefined || b.add_stock === true || b.add_stock === '1' || b.add_stock === 'true';
+  let purchase = null;
+
   const crossed = await mutateInventory((inv) => {
     const item = inv.items.find((i) => i.id === idOf(req));
     if (!item) throw new HttpError(404, 'Ingrediente no encontrado');
     const before = item.stock;
     const wasLow = item.stock <= 0 || (item.min_stock > 0 && item.stock <= item.min_stock);
     let delta;
-    if (type === 'compra') delta = qty;
-    else if (type === 'merma') delta = -qty;
+    if (type === 'compra') {
+      purchase = buildPurchase(item, { date, qty, unit: b.unit, total_cost: totalCost, supplier: str(b.supplier, 80) || item.supplier, note: str(b.note, 140) });
+      delta = addStock ? purchase.qty_item : 0;
+      // El costo del ingrediente es el de la compra más reciente (una compra con fecha anterior no lo cambia)
+      if (totalCost !== null && purchase.qty_item > 0 && date >= (item.last_purchase_date || '')) {
+        item.cost = Math.round((totalCost / purchase.qty_item) * 10000) / 10000;
+        item.last_purchase_date = date;
+      }
+      if (!addStock) return [];
+    } else if (type === 'merma') delta = -qty;
     else delta = qty - before;
     item.stock = n3(before + delta);
-    if (type === 'compra' && totalCost !== null && qty > 0) item.cost = Math.round((totalCost / qty) * 10000) / 10000; // costo por unidad
     inv.seq.movement = (inv.seq.movement || 0) + 1;
     inv.movements.unshift({
       id: inv.seq.movement, at: new Date().toISOString(), item_id: item.id, type, qty: n3(delta),
@@ -105,8 +118,30 @@ r.post('/items/:id/movements', async (req, res) => {
     const nowLow = item.stock <= 0 || (item.min_stock > 0 && item.stock <= item.min_stock);
     return !wasLow && nowLow ? [{ ...item }] : [];
   });
+  if (purchase) await savePurchase(purchase);
   if (crossed.length) await settle(notifyLowStock(crossed), 'inventario');
   res.json(await view());
+});
+
+/* -------------------------------- Compras -------------------------------- */
+
+/** Historial de compras de los últimos meses (13 por defecto: un año + el mes anterior para comparar). */
+r.get('/purchases', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const months = Math.min(Math.max(Number(req.query.months) || 13, 1), 36);
+  const inv = await getInventory();
+  res.json({
+    today: todayLocal(),
+    months: lastMonths(months),
+    purchases: await listPurchases(months),
+    items: inv.items.map((i) => ({ id: i.id, name: i.name, unit: i.unit, base_unit: baseUnit(i.unit), units: compatibleUnits(i.unit), supplier: i.supplier })),
+  });
+});
+
+/** Borra una compra del historial (no cambia la existencia). */
+r.delete('/purchases/:id', async (req, res) => {
+  await deletePurchase(String(req.params.id));
+  res.json({ ok: true });
 });
 
 /* -------------------------------- Recetas -------------------------------- */

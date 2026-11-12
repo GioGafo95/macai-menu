@@ -1073,6 +1073,7 @@ const invHead = () => `
     <div class="view-head"><h2>Inventario</h2>
       <div class="filters">
         <button class="chip${invView === 'stock' ? ' active' : ''}" data-inv-view="stock">📦 Existencias</button>
+        <button class="chip${invView === 'purchases' ? ' active' : ''}" data-inv-view="purchases">🧾 Compras</button>
         <button class="chip${invView === 'costs' ? ' active' : ''}" data-inv-view="costs">💰 Costos y ganancia</button>
       </div>
     </div>`;
@@ -1105,6 +1106,7 @@ const refreshInvBadge = () => A('/inventory').then((d) => updateInvBadge(d.summa
 
 async function renderInventory() {
   if (invView === 'costs') return renderCosts();
+  if (invView === 'purchases') return renderPurchases();
   const data = await A('/inventory');
   const items = data.items;
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -1254,6 +1256,7 @@ async function renderInventory() {
     deleteConfirm: '¿Eliminar este ingrediente? También se quita de las recetas.',
   });
   const movement = (type, i) => {
+    if (type === 'compra') return purchaseForm({ ...i, units: data.unit_families?.[i.unit] || [i.unit] }, items, renderInventory);
     const titles = { compra: `📥 Entrada de ${i.name}`, merma: `🗑️ Merma de ${i.name}`, conteo: `🔢 Conteo de ${i.name}` };
     const fields = type === 'compra' ? [
       { name: 'qty', label: `¿Cuánto llegó? (${i.unit})`, type: 'number', step: 'any', hint: `Ahora tienes ${fmtQty(i.stock, i.unit)}.${i.to_buy ? ` Sugerido: ${fmtQty(i.to_buy, i.unit)}.` : ''}` },
@@ -1322,6 +1325,257 @@ async function renderInventory() {
       toast('✓ Guardado');
     } catch (e) { input.checked = !input.checked; toast(e.message, 4000); }
   }));
+}
+
+/* -------------------------------- Compras -------------------------------- */
+
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MONTHS_LONG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const monthLabel = (ym, long = false) => { const [y, m] = ym.split('-').map(Number); return `${(long ? MONTHS_LONG : MONTHS_ES)[m - 1]} ${long ? y : String(y).slice(2)}`; };
+const dayLabel = (d) => { const [, m, dd] = d.split('-').map(Number); return `${dd} ${MONTHS_ES[m - 1]}`; };
+const PER = { kg: 'kg', L: 'litro', pz: 'pieza', porción: 'porción' };
+const localToday = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+let purMonth = null;
+let purItem = null;
+let purRange = 12;
+
+/** Precio promedio ponderado (por kg / L / pieza) de un grupo de compras. */
+function avgPrice(list) {
+  const priced = list.filter((p) => p.price_base > 0 && p.total_cost > 0);
+  if (!priced.length) return null;
+  const total = priced.reduce((a, p) => a + p.total_cost, 0);
+  const qty = priced.reduce((a, p) => a + p.total_cost / p.price_base, 0);
+  return qty ? total / qty : null;
+}
+const pct = (a, b) => (a && b ? Math.round(((b - a) / a) * 1000) / 10 : null);
+const changeChip = (c) => (c === null ? '<span class="muted small">—</span>'
+  : c > 0 ? `<span class="m-chip m-low">▲ ${c}%</span>` : c < 0 ? `<span class="m-chip m-good">▼ ${Math.abs(c)}%</span>` : '<span class="m-chip">= 0%</span>');
+
+/**
+ * Formulario de compra. item = ingrediente fijo (desde "+ Entrada") o null para elegirlo.
+ * items: [{ id, name, unit, units, supplier, to_buy?, stock? }]
+ */
+function purchaseForm(item, items, onDone) {
+  const pick = !item;
+  const first = item || items[0];
+  if (!first) return toast('Primero crea ingredientes en 📦 Existencias', 4000);
+  const unitsOf = (it) => it.units || [it.unit];
+  const fields = [
+    ...(pick ? [{ name: 'item_id', label: 'Producto', type: 'select', options: items.map((i) => ({ value: i.id, label: i.name })) }] : []),
+    { name: 'date', label: 'Fecha de compra', type: 'date' },
+    { name: 'qty', label: '¿Cuánto compraste?', type: 'number', step: 'any', hint: item?.stock !== undefined ? `Ahora tienes ${fmtQty(item.stock, item.unit)}.${item.to_buy ? ` Sugerido: ${fmtQty(item.to_buy, item.unit)}.` : ''}` : '' },
+    { name: 'unit', label: 'Unidad', type: 'select', options: unitsOf(first).map((u) => ({ value: u, label: u })) },
+    { name: 'total_cost', label: 'Costo total que pagaste', type: 'number', step: '0.01', hint: '<span data-price-preview>Escribe cantidad y costo para ver el precio por kilo / litro / pieza.</span>' },
+    { name: 'supplier', label: 'Proveedor (opcional)', placeholder: 'Ej. Costco, Central de abastos' },
+    { name: 'note', label: 'Nota (opcional)', placeholder: 'Ej. marca, factura 123' },
+    { name: 'add_stock', label: 'Sumar a la existencia del inventario', type: 'checkbox', hint: 'Desmárcalo si solo estás capturando una compra pasada para el historial de precios.' },
+  ];
+  openForm({
+    title: item ? `📥 Compra de ${item.name}` : '📥 Registrar compra',
+    fields,
+    values: { item_id: first.id, date: localToday(), unit: first.unit, supplier: first.supplier || '', add_stock: true, ...(item?.to_buy ? { qty: item.to_buy } : {}) },
+    submitLabel: 'Registrar compra',
+    onSubmit: async (v) => {
+      const id = pick ? Number(v.item_id) : item.id;
+      await A(`/inventory/items/${id}/movements`, { method: 'POST', body: { type: 'compra', ...v } });
+      toast(`✓ Compra registrada: ${(items.find((i) => i.id === id) || item).name}`);
+      onDone?.();
+    },
+  });
+  const form = document.querySelector('.sheet form');
+  if (!form) return;
+  const cur = () => (pick ? items.find((i) => i.id === Number(form.elements.item_id.value)) : item) || first;
+  const preview = () => {
+    const it = cur();
+    const qty = Number(form.elements.qty.value);
+    const cost = Number(form.elements.total_cost.value);
+    const box = $('[data-price-preview]', form);
+    if (!(qty > 0 && cost > 0)) { box.textContent = 'Escribe cantidad y costo para ver el precio por kilo / litro / pieza.'; return; }
+    const u = form.elements.unit.value;
+    const base = { g: 'kg', kg: 'kg', ml: 'L', L: 'L' }[it.unit] || it.unit;
+    const qBase = base === 'kg' || base === 'L' ? convertQty(qty, u, base) : qty;
+    box.innerHTML = `= <strong>${money(cost / qBase)} por ${PER[base] || base}</strong>`;
+  };
+  form.addEventListener('input', preview);
+  if (pick) form.elements.item_id.addEventListener('change', () => {
+    const it = cur();
+    form.elements.unit.innerHTML = unitsOf(it).map((u) => `<option ${u === it.unit ? 'selected' : ''}>${u}</option>`).join('');
+    if (!form.elements.supplier.value && it.supplier) form.elements.supplier.value = it.supplier;
+    preview();
+  });
+}
+
+async function renderPurchases() {
+  const data = await A('/inventory/purchases?months=13');
+  const all = data.purchases;
+  const months = [...data.months].reverse(); // más reciente primero
+  if (!purMonth || !data.months.includes(purMonth)) purMonth = months[0];
+  const prevMonth = data.months[data.months.indexOf(purMonth) - 1] || null;
+  const inMonth = all.filter((p) => p.date.startsWith(purMonth));
+  const inPrev = prevMonth ? all.filter((p) => p.date.startsWith(prevMonth)) : [];
+  const spent = inMonth.reduce((a, p) => a + (p.total_cost || 0), 0);
+  const spentPrev = inPrev.reduce((a, p) => a + (p.total_cost || 0), 0);
+
+  // Variación por producto: promedio del mes contra el mes anterior (o la última compra antes del mes)
+  const ids = [...new Set(inMonth.map((p) => p.item_id))];
+  const variation = ids.map((id) => {
+    const mine = inMonth.filter((p) => p.item_id === id).sort((a, b) => a.date.localeCompare(b.date));
+    const now = avgPrice(mine);
+    const prevList = inPrev.filter((p) => p.item_id === id);
+    let before = avgPrice(prevList);
+    let beforeLabel = prevMonth ? monthLabel(prevMonth) : '';
+    if (before === null) {
+      const older = all.filter((p) => p.item_id === id && p.date < `${purMonth}-01` && p.price_base > 0)[0];
+      if (older) { before = older.price_base; beforeLabel = dayLabel(older.date); }
+    }
+    const pricedMine = mine.filter((p) => p.price_base > 0);
+    return {
+      id, name: mine.at(-1).item_name, base: mine.at(-1).base_unit, n: mine.length,
+      now, before, beforeLabel, change: pct(before, now),
+      firstLast: pricedMine.length > 1 ? pct(pricedMine[0].price_base, pricedMine.at(-1).price_base) : null,
+      spent: mine.reduce((a, p) => a + (p.total_cost || 0), 0),
+    };
+  }).sort((a, b) => Math.abs(b.change ?? 0) - Math.abs(a.change ?? 0));
+  const up = variation.filter((v) => v.change > 0).length;
+  const down = variation.filter((v) => v.change < 0).length;
+
+  // Productos con precio para la gráfica
+  const chartItems = [...new Map(all.filter((p) => p.price_base > 0).map((p) => [p.item_id, p.item_name])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  if (!chartItems.some(([id]) => id === purItem)) purItem = chartItems[0]?.[0] ?? null;
+
+  view.innerHTML = `
+    ${invHead()}
+    <div class="inv-toolbar"><button class="btn" data-new-purchase>+ Registrar compra</button></div>
+    <div class="filters cost-range"><select class="input pur-month" data-pur-month>
+      ${months.map((m) => `<option value="${m}" ${m === purMonth ? 'selected' : ''}>${monthLabel(m, true)}</option>`).join('')}
+    </select></div>
+    <div class="stats">
+      <div class="stat"><small>Gastado en ${monthLabel(purMonth)}</small><strong>${money(spent)}</strong></div>
+      <div class="stat"><small>Contra ${prevMonth ? monthLabel(prevMonth) : 'mes anterior'}</small><strong>${spentPrev ? `${pct(spentPrev, spent) > 0 ? '+' : ''}${pct(spentPrev, spent)}%` : '—'}</strong></div>
+      <div class="stat"><small>Compras</small><strong>${inMonth.length}</strong></div>
+      <div class="stat"><small>Subieron / bajaron</small><strong>▲${up} · ▼${down}</strong></div>
+    </div>
+    ${!all.length ? `<div class="panel inv-onboard"><h3>🧾 Historial de compras</h3><ol>
+      <li>Cada vez que compres, registra la compra con <strong>+ Registrar compra</strong> (o con <strong>+ Entrada</strong> en Existencias): fecha, cantidad, unidad y lo que pagaste.</li>
+      <li>Se calcula solo el <strong>precio por kilo, litro o pieza</strong>, se suma a tu inventario y se actualiza el costo de tus productos.</li>
+      <li>Al final del mes verás qué subió o bajó de precio, y las gráficas de 3, 6 y 12 meses.</li></ol>
+      <p class="hint">¿Tienes tickets de meses pasados? Captúralos con su fecha y desmarca "Sumar a la existencia" para que solo cuenten en el historial.</p></div>` : ''}
+
+    ${variation.length ? `<div class="panel inv-panel"><h3>📊 Variación de precios · ${monthLabel(purMonth, true)}</h3>
+      <p class="muted small" style="margin-top:0">Precio promedio del mes contra el mes anterior (o tu última compra antes de este mes).</p>
+      <div class="cost-table pur-var">
+        <div class="cost-tr th"><span>Producto</span><span>Antes</span><span>Ahora</span><span>Cambio</span></div>
+        ${variation.map((v) => `<div class="cost-tr"><span>${esc(v.name)} <span class="muted small">${v.n} ${v.n === 1 ? 'compra' : 'compras'}${v.firstLast ? ` · en el mes ${v.firstLast > 0 ? '+' : ''}${v.firstLast}%` : ''}</span></span>
+          <span>${v.before ? `${money(v.before)}<br><span class="muted small">${esc(v.beforeLabel)}</span>` : '<span class="muted small">primera vez</span>'}</span>
+          <span>${v.now ? `${money(v.now)}<br><span class="muted small">por ${PER[v.base] || v.base}</span>` : '—'}</span>
+          <span>${changeChip(v.change)}</span></div>`).join('')}
+      </div></div>` : ''}
+
+    ${chartItems.length ? `<div class="panel inv-panel"><div class="panel-head"><h3>📈 Precio en el tiempo</h3>
+        <div class="filters">${[[3, 'Trimestral'], [6, 'Semestral'], [12, 'Anual']].map(([n, l]) => `<button class="chip${purRange === n ? ' active' : ''}" data-pur-range="${n}">${l}</button>`).join('')}</div></div>
+      <select class="input pur-item" data-pur-item>${chartItems.map(([id, n]) => `<option value="${id}" ${id === purItem ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <div class="pur-summary" data-pur-summary></div>
+      <div class="pur-chart" data-pur-chart></div>
+    </div>` : ''}
+
+    <div class="panel inv-panel"><h3>🧾 Compras de ${monthLabel(purMonth, true)}</h3>
+      ${inMonth.length ? `<div class="pur-list">${inMonth.map((p) => `<div class="pur-row">
+        <div class="pur-date">${dayLabel(p.date)}</div>
+        <div class="grow"><strong>${esc(p.item_name)}</strong> <span class="muted">· ${fmtQty(p.qty, p.unit)}</span>
+          <div class="muted small">${p.supplier ? esc(p.supplier) : ''}${p.note ? `${p.supplier ? ' · ' : ''}${esc(p.note)}` : ''}</div></div>
+        <div class="pur-money">${p.total_cost !== null ? `<strong>${money(p.total_cost)}</strong>` : '<span class="muted">sin costo</span>'}
+          ${p.price_base ? `<div class="muted small">${money(p.price_base)}/${p.base_unit}</div>` : ''}</div>
+        <button class="icon-btn" data-del-purchase="${p.id}" aria-label="Borrar compra">×</button>
+      </div>`).join('')}</div>` : '<p class="muted small">No hay compras registradas en este mes.</p>'}
+    </div>`;
+
+  bindInvHead();
+  const reload = () => renderPurchases();
+  $('[data-new-purchase]', view).addEventListener('click', () => purchaseForm(null, data.items, reload));
+  $('[data-pur-month]', view).addEventListener('change', (e) => { purMonth = e.target.value; reload(); });
+  $$('[data-pur-range]', view).forEach((b) => b.addEventListener('click', () => {
+    purRange = Number(b.dataset.purRange);
+    $$('[data-pur-range]', view).forEach((x) => x.classList.toggle('active', x === b));
+    drawPriceChart(all, data.months);
+  }));
+  $('[data-pur-item]', view)?.addEventListener('change', (e) => { purItem = Number(e.target.value); drawPriceChart(all, data.months); });
+  $$('[data-del-purchase]', view).forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('¿Borrar esta compra del historial? La existencia del inventario no cambia (si hace falta, corrígela con Conteo).')) return;
+    try { await A(`/inventory/purchases/${b.dataset.delPurchase}`, { method: 'DELETE' }); toast('✓ Compra borrada'); reload(); } catch (e) { toast(e.message, 4000); }
+  }));
+  if (chartItems.length) drawPriceChart(all, data.months);
+}
+
+/** Gráfica de línea: precio promedio por mes del producto elegido (trimestral, semestral o anual). */
+function drawPriceChart(all, monthsAll) {
+  const box = $('[data-pur-chart]', view);
+  const sum = $('[data-pur-summary]', view);
+  if (!box) return;
+  const months = monthsAll.slice(-purRange);
+  const mine = all.filter((p) => p.item_id === purItem && p.price_base > 0);
+  const base = mine[0]?.base_unit || '';
+  const pts = months.map((m, i) => {
+    const list = mine.filter((p) => p.date.startsWith(m));
+    const avg = avgPrice(list);
+    return { m, i, avg, n: list.length, min: list.length ? Math.min(...list.map((p) => p.price_base)) : null, max: list.length ? Math.max(...list.map((p) => p.price_base)) : null };
+  });
+  const have = pts.filter((p) => p.avg !== null);
+  if (!have.length) {
+    sum.innerHTML = '';
+    box.innerHTML = `<p class="muted small">Sin compras de este producto en los últimos ${purRange} meses.</p>`;
+    return;
+  }
+  const firstP = have[0], lastP = have.at(-1);
+  const ch = have.length > 1 ? pct(firstP.avg, lastP.avg) : null;
+  const vals = have.flatMap((p) => [p.min, p.max, p.avg]);
+  sum.innerHTML = have.length > 1
+    ? `De <strong>${money(firstP.avg)}</strong> (${monthLabel(firstP.m)}) a <strong>${money(lastP.avg)}</strong> (${monthLabel(lastP.m)}) por ${PER[base] || base} ${changeChip(ch)}
+       <span class="muted small">· mínimo ${money(Math.min(...vals))} · máximo ${money(Math.max(...vals))}</span>`
+    : `<strong>${money(lastP.avg)}</strong> por ${PER[base] || base} en ${monthLabel(lastP.m)} <span class="muted small">· registra más compras para ver la tendencia</span>`;
+
+  const W = Math.max(280, box.clientWidth), H = 220, L = 52, R = 14, T = 14, B = 28;
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi - lo) * 0.15 || hi * 0.1 || 1;
+  lo = Math.max(0, lo - pad); hi += pad;
+  const step = (() => { const raw = (hi - lo) / 4; const p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 2.5, 5, 10].map((k) => k * p).find((s) => s >= raw); })();
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const x = (i) => L + (months.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (months.length - 1));
+  const y = (v) => T + (1 - (v - lo) / (hi - lo || 1)) * (H - T - B);
+  const ticks = []; for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  const path = have.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ');
+  const colW = (W - L - R) / Math.max(1, months.length - 1);
+  const showLabel = (i) => months.length <= 6 || i % 2 === (months.length - 1) % 2;
+
+  box.innerHTML = `
+    <svg width="${W}" height="${H}" role="img" aria-label="Precio por ${PER[base] || base} de ${esc(mine[0]?.item_name || '')}, últimos ${purRange} meses">
+      ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="pc-grid"/><text x="${L - 8}" y="${y(v) + 4}" class="pc-ax" text-anchor="end">${money(v).replace(/\.00$/, '')}</text>`).join('')}
+      ${months.map((m, i) => (showLabel(i) ? `<text x="${i === months.length - 1 && months.length > 1 ? W - 2 : x(i)}" y="${H - 8}" class="pc-ax" text-anchor="${i === months.length - 1 && months.length > 1 ? 'end' : 'middle'}">${monthLabel(m)}</text>` : '')).join('')}
+      ${have.filter((p) => p.n > 1 && p.max > p.min).map((p) => `<line x1="${x(p.i)}" x2="${x(p.i)}" y1="${y(p.max)}" y2="${y(p.min)}" class="pc-range"/>`).join('')}
+      <path d="${path}" class="pc-line"/>
+      <line class="pc-cross" y1="${T}" y2="${H - B}" x1="0" x2="0" style="display:none"/>
+      ${have.map((p) => `<circle cx="${x(p.i)}" cy="${y(p.avg)}" r="5" class="pc-dot"/>`).join('')}
+      ${months.map((m, i) => `<rect x="${x(i) - colW / 2}" y="${T}" width="${colW}" height="${H - T - B}" fill="transparent" data-i="${i}"/>`).join('')}
+    </svg>
+    <div class="pc-tip" hidden></div>`;
+  const tip = $('.pc-tip', box);
+  const cross = $('.pc-cross', box);
+  const show = (i) => {
+    const p = pts[i];
+    cross.style.display = '';
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i));
+    tip.hidden = false;
+    tip.innerHTML = `<strong>${monthLabel(p.m, true)}</strong><br>${p.avg !== null
+      ? `${money(p.avg)} por ${PER[base] || base}<br><span class="muted">${p.n} ${p.n === 1 ? 'compra' : 'compras'}${p.n > 1 && p.max > p.min ? ` · ${money(p.min)} – ${money(p.max)}` : ''}</span>`
+      : '<span class="muted">Sin compras</span>'}`;
+    const left = Math.min(W - tip.offsetWidth - 4, Math.max(4, x(i) - tip.offsetWidth / 2));
+    tip.style.left = `${left}px`;
+  };
+  $$('rect[data-i]', box).forEach((r) => {
+    r.addEventListener('mouseenter', () => show(Number(r.dataset.i)));
+    r.addEventListener('click', () => show(Number(r.dataset.i)));
+  });
+  $('svg', box).addEventListener('mouseleave', () => { tip.hidden = true; cross.style.display = 'none'; });
 }
 
 /* --------------------------- Costos y ganancia --------------------------- */

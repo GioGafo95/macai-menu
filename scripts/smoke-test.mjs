@@ -111,6 +111,8 @@ check(settings.status === 200 && settings.data.api_key, 'Ajustes del panel');
 check(!('admin_password_hash' in settings.data), 'No expone datos privados');
 const inventory = await call('/api/admin/inventory');
 check(inventory.status === 200 && Array.isArray(inventory.data.items), `Inventario: ${inventory.data.items?.length} ingredientes`);
+const purchases = await call('/api/admin/inventory/purchases?months=3');
+check(purchases.status === 200 && Array.isArray(purchases.data.purchases), `Compras: ${purchases.data.purchases?.length} en 3 meses`);
 const costs = await call('/api/admin/inventory/costs?days=7');
 check(costs.status === 200 && Array.isArray(costs.data.products) && costs.data.sales, `Costos: ${costs.data.products?.length} productos`);
 const active = await call('/api/admin/orders?view=active');
