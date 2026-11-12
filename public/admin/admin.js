@@ -10,6 +10,7 @@ const STATUS = {
 const NEXT = {
   delivery: { nuevo: 'preparando', preparando: 'listo', listo: 'en_camino', en_camino: 'entregado' },
   pickup: { nuevo: 'preparando', preparando: 'listo', listo: 'entregado' },
+  dine_in: { nuevo: 'preparando', preparando: 'listo', listo: 'entregado' },
 };
 const NEXT_LABEL = { preparando: '👩‍🍳 Preparar', listo: '✅ Listo', en_camino: '🛵 Enviar', entregado: '📦 Entregado' };
 const POLL_MS = 10_000;
@@ -292,14 +293,17 @@ function orderCard(o, flash) {
       <span class="status-badge s-${o.status}">${STATUS[o.status]}</span>
     </div>
     <div class="order-body">
+      ${o.source === 'mesero' ? `<div class="row"><span>🧑‍🍳</span><div class="muted small">Lo tomó <strong>${esc(o.taken_by || 'mesero')}</strong></div></div>` : ''}
       <div class="row"><span>👤</span><div><strong>${esc(o.customer.name)}</strong>
-        <span class="contact-links"><a href="tel:${esc(phone)}">📞 ${esc(o.customer.phone)}</a>
-        <a href="https://wa.me/${esc(waPhone.length === 10 ? '52' + waPhone : waPhone)}" target="_blank" rel="noopener">WhatsApp</a></span></div></div>
+        ${phone ? `<span class="contact-links"><a href="tel:${esc(phone)}">📞 ${esc(o.customer.phone)}</a>
+        <a href="https://wa.me/${esc(waPhone.length === 10 ? '52' + waPhone : waPhone)}" target="_blank" rel="noopener">WhatsApp</a></span>` : ''}</div></div>
       ${o.fulfillment === 'delivery'
         ? `<div class="row"><span>🛵</span><div>${esc(o.address)}${o.zone ? ` <span class="muted">(${esc(o.zone.name)})</span>` : ''}${o.location ? ` <span class="muted">· ${o.location.distance_km} km</span>` : ''}
             ${o.address_ref ? `<div class="muted small">${esc(o.address_ref)}</div>` : ''}
             <a class="small" href="https://www.google.com/maps/search/?api=1&query=${o.location ? `${o.location.lat},${o.location.lng}` : encodeURIComponent(o.address)}" target="_blank" rel="noopener">${o.location ? '📍 Ver ubicación en el mapa' : 'Ver en mapa'}</a></div></div>`
-        : '<div class="row"><span>🏪</span><div><strong>Recoge en tienda</strong></div></div>'}
+        : o.fulfillment === 'dine_in'
+          ? `<div class="row"><span>🍽️</span><div><strong>Comer aquí · Mesa ${esc(o.table)}</strong></div></div>`
+          : `<div class="row"><span>🏪</span><div><strong>${o.source === 'mesero' ? 'Para llevar' : 'Recoge en tienda'}</strong></div></div>`}
       <div class="order-items">
         ${o.items.map((i) => `
           <div class="it"><strong>${i.quantity}×</strong> ${esc(i.name)} <span class="muted" style="float:right">${money(i.line_total)}</span></div>
@@ -973,6 +977,22 @@ async function renderSettings() {
         ${fieldHtml({ name: 'next', label: 'Nueva contraseña (mín. 8 caracteres)', type: 'password' })}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn">Cambiar contraseña</button></div>
+    </form>
+    <form class="panel" id="waiter-form" novalidate>
+      <h3>🧑‍🍳 Modo mesero</h3>
+      <p class="muted">Tus meseros toman pedidos desde su celular en <a href="/mesero/" target="_blank" rel="noopener">${esc(shopUrl)}/mesero/</a>
+        (comer aquí con número de mesa, para llevar o a domicilio). Los pedidos llegan a este panel como cualquier otro.
+        Entran con esta contraseña, que <strong>no</strong> da acceso al panel de admin.</p>
+      <p class="small">${settings.waiter_enabled === '1' ? '✅ Acceso de meseros activado.' : '⚪ Sin contraseña de meseros: por ahora solo entras tú con la contraseña del admin.'}</p>
+      <div class="form-grid two">
+        ${fieldHtml({ name: 'waiter_password', label: settings.waiter_enabled === '1' ? 'Nueva contraseña de meseros (mín. 6)' : 'Contraseña de meseros (mín. 6 caracteres)', type: 'password' })}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px">
+        <button type="button" class="btn btn-ghost btn-sm" data-copy-mesero>Copiar link de meseros</button>
+        ${settings.waiter_enabled === '1' ? '<button type="button" class="btn btn-light" data-waiter-off>Desactivar acceso</button>' : ''}
+        <button class="btn">${settings.waiter_enabled === '1' ? 'Cambiar contraseña' : 'Activar modo mesero'}</button>
+      </div>
+      <p class="hint">Al cambiarla o desactivarla se cierra la sesión en todos los celulares de meseros.</p>
     </form>`;
 
   wireSettings(defs);
@@ -1001,6 +1021,25 @@ async function renderSettings() {
       box.innerHTML = results.map((r) => r.ok ? `<div class="ok">✓ ${esc(r.channel)}: enviado</div>` : `<div class="bad">✗ ${esc(r.error)}</div>`).join('');
     } catch (ex) { box.innerHTML = `<div class="bad">${esc(ex.message)}</div>`; }
     e.target.disabled = false;
+  });
+  $('[data-copy-mesero]', view).addEventListener('click', () => copy(`${shopUrl}/mesero/`, 'Link de meseros copiado'));
+  $('#waiter-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pw = e.target.elements.waiter_password.value;
+    if (pw.length < 6) return toast('La contraseña de meseros debe tener al menos 6 caracteres', 4000);
+    try {
+      settings = await A('/waiter-password', { method: 'POST', body: { password: pw } });
+      renderSettings();
+      toast('✓ Contraseña de meseros guardada');
+    } catch (ex) { toast(ex.message, 4000); }
+  });
+  $('[data-waiter-off]', view)?.addEventListener('click', async () => {
+    if (!confirm('¿Desactivar el acceso de meseros? Se cerrará su sesión en todos los celulares.')) return;
+    try {
+      settings = await A('/waiter-password', { method: 'POST', body: { password: '' } });
+      renderSettings();
+      toast('Acceso de meseros desactivado');
+    } catch (ex) { toast(ex.message, 4000); }
   });
   $('#pw-form').addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -3,6 +3,7 @@ import { getSettings, updateSettings } from './data.js';
 import { HttpError } from './util.js';
 
 const COOKIE = 'macai_admin';
+const WAITER_COOKIE = 'macai_mesero';
 const TTL_MS = 14 * 24 * 3600 * 1000;
 
 export function hashPassword(pw) {
@@ -56,23 +57,27 @@ export async function changePassword(current, next) {
   await updateSettings({ admin_password_hash: hashPassword(next) });
 }
 
-// La firma incluye el hash de la contraseña: al cambiarla se cierran todas las sesiones.
-function sign(payload, s) {
-  const key = s.session_secret + '|' + s.admin_password_hash;
+// La firma incluye el hash de la contraseña: al cambiarla se cierran todas las sesiones (de ese rol).
+function sign(payload, s, role = 'admin') {
+  const key = role === 'mesero'
+    ? `${s.session_secret}|mesero|${s.waiter_password_hash}`
+    : `${s.session_secret}|${s.admin_password_hash}`;
   return crypto.createHmac('sha256', key).update(payload).digest('base64url');
 }
 
-async function createToken() {
+async function createToken(role = 'admin') {
   const s = await getSettings();
   const payload = String(Date.now() + TTL_MS);
-  return `${payload}.${sign(payload, s)}`;
+  return `${payload}.${sign(payload, s, role)}`;
 }
 
-async function validToken(token) {
+async function validToken(token, role = 'admin') {
   if (!token) return false;
   const [payload, sig] = token.split('.');
   if (!payload || !sig) return false;
-  const expected = sign(payload, await getSettings());
+  const s = await getSettings();
+  if (role === 'mesero' && !s.waiter_password_hash) return false;
+  const expected = sign(payload, s, role);
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
@@ -100,6 +105,36 @@ export async function setSessionCookie(req, res) {
 
 export function clearSessionCookie(res) {
   res.clearCookie(COOKIE, { path: '/' });
+}
+
+/* ------------------------------ Meseros ------------------------------ */
+
+export async function verifyWaiterPassword(pw) {
+  if (!pw) return false;
+  return matchesHash(pw, (await getSettings()).waiter_password_hash);
+}
+
+/** Cambia (o con '' desactiva) la contraseña de meseros. Cierra las sesiones de meseros abiertas. */
+export async function setWaiterPassword(pw) {
+  if (pw && pw.length < 6) throw new HttpError(400, 'La contraseña de meseros debe tener al menos 6 caracteres');
+  await updateSettings({ waiter_password_hash: pw ? hashPassword(pw) : '' });
+}
+
+export async function setWaiterCookie(req, res) {
+  res.cookie(WAITER_COOKIE, await createToken('mesero'), {
+    httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: TTL_MS, path: '/',
+  });
+}
+
+export function clearWaiterCookie(res) {
+  res.clearCookie(WAITER_COOKIE, { path: '/' });
+}
+
+/** Mesero o admin. Deja en req.staffRole quién es ('admin' | 'mesero'). */
+export async function requireStaff(req, res, next) {
+  if (await validToken(readCookie(req, COOKIE))) { req.staffRole = 'admin'; return next(); }
+  if (await validToken(readCookie(req, WAITER_COOKIE), 'mesero')) { req.staffRole = 'mesero'; return next(); }
+  next(new HttpError(401, 'Inicia sesión para tomar pedidos.'));
 }
 
 export async function requireAdmin(req, res, next) {

@@ -101,7 +101,7 @@ Haz push a `main`. En la pestaña **Actions** verás el workflow **Desplegar**:
 1. **Pruebas**: revisa sintaxis, levanta la app y corre la prueba de punta a punta, y hace `cdk synth`.
 2. **Desplegar (qa)**: `cdk deploy Macai-qa` y una prueba de humo contra la URL real.
 
-El resumen del workflow muestra la URL (algo como `https://d1234abcd.cloudfront.net`). El panel está en `/admin/`.
+El resumen del workflow muestra la URL (algo como `https://d1234abcd.cloudfront.net`). El panel está en `/admin/` y el modo mesero en `/mesero/` (actívalo en Ajustes → Modo mesero).
 
 > La primera vez, la app carga sola el menú de Macaí (`server/catalog.js`). Configura en el panel tu WhatsApp, datos bancarios, zonas de envío y notificaciones de cada ambiente.
 

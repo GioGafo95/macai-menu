@@ -136,6 +136,7 @@ jobs:
           echo "### 🚀 Macaí $STAGE desplegado" >> "$GITHUB_STEP_SUMMARY"
           echo "- Menú: $URL" >> "$GITHUB_STEP_SUMMARY"
           echo "- Panel: $URL/admin/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Modo mesero: $URL/mesero/" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prueba de humo
         env:

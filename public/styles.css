@@ -320,3 +320,35 @@ textarea.input { resize: vertical; min-height: 70px; }
 .map-pin.home { background: var(--orange); }
 .map-pin.store { background: var(--cyan); }
 .leaflet-container { font-family: var(--font-body); }
+
+/* ---------- Modo mesero (/mesero/) ---------- */
+.staff-bar {
+  display: flex; align-items: center; gap: 6px; padding: 10px 16px;
+  max-width: 960px; margin: 0 auto;
+}
+.staff-logo { height: 28px; width: auto; flex-shrink: 0; }
+.staff-spacer { flex: 1; }
+.staff-btn {
+  border: 0; background: #fff; color: var(--text); font-weight: 800; font-size: .85rem;
+  padding: 8px 11px; border-radius: 999px; box-shadow: 0 1px 3px rgba(18,48,74,.1);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;
+}
+#waiter-btn { flex-shrink: 1; }
+.staff-btn.ghost { background: transparent; box-shadow: none; color: var(--muted); padding: 8px 4px; }
+.staff-login { max-width: 360px; margin: 40px auto; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+.staff-login h2 { margin: 0; }
+.staff-login p { margin: 0 0 6px; }
+.staff-login-logo { width: 200px; height: auto; margin: 0 auto 6px; }
+.paid-option { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 12px; }
+.staff-sent { text-align: center; padding-top: 28px; }
+.staff-sent .big { font-size: 3rem; }
+.staff-sent h2 { margin: 8px 0 4px; }
+.staff-order { background: var(--card); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); display: grid; gap: 4px; }
+.staff-order.s-listo { outline: 2px solid #34c77b; }
+.staff-order-head { display: flex; align-items: center; gap: 10px; }
+.staff-order-head span:nth-child(2) { flex: 1; font-weight: 700; }
+.staff-order .btn { justify-self: start; margin-top: 6px; }
+.status-pill { font-size: .75rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--orange-soft); color: var(--orange-strong); }
+.status-pill.s-preparando { background: #fff3c4; color: #8a6200; }
+.status-pill.s-listo { background: #d8f7e6; color: #137a45; }
+.status-pill.s-en_camino { background: var(--cyan-soft); color: var(--cyan-ink); }

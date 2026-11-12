@@ -47,6 +47,10 @@ const home = await call('/', { raw: true });
 check(home.status === 200 && (await home.text()).includes('logo.png'), 'Página del menú responde');
 const admin = await call('/admin/', { raw: true });
 check(admin.status === 200, 'Página del panel responde');
+const meseroPage = await call('/mesero/', { raw: true });
+check(meseroPage.status === 200 && (await meseroPage.text()).includes('data-mode="mesero"'), 'Página del modo mesero responde');
+const noStaff = await call('/api/mesero/menu');
+check(noStaff.status === 401, 'Modo mesero protegido con contraseña');
 const health = await call('/api/health');
 check(health.status === 200 && health.data.ok, `API saludable (almacenamiento: ${health.data.store})`);
 
@@ -107,6 +111,25 @@ check(settings.status === 200 && settings.data.api_key, 'Ajustes del panel');
 check(!('admin_password_hash' in settings.data), 'No expone datos privados');
 const active = await call('/api/admin/orders?view=active');
 check(active.status === 200 && Array.isArray(active.data.data), `Pedidos activos: ${active.data.data?.length}`);
+
+// Modo mesero (con la sesión del admin)
+const staffMenu = await call('/api/mesero/menu');
+check(staffMenu.status === 200 && staffMenu.data.products?.length > 0, 'Modo mesero: menú');
+const staffBody = {
+  items: [{ product_id: bowl.id, quantity: 1, toppings }],
+  fulfillment: 'dine_in', payment_method: 'cash', paid: true, taken_by: 'Prueba automática',
+};
+const noTable = await call('/api/mesero/orders', { method: 'POST', body: staffBody });
+check(noTable.status === 400 && /mesa/i.test(noTable.data.error), 'Modo mesero: pide número de mesa');
+// Solo en local se crea el pedido de mesero (en AWS mandaría otra notificación de prueba al celular)
+if (/localhost|127\.0\.0\.1/.test(base)) {
+  const staffOrder = await call('/api/mesero/orders', { method: 'POST', body: { ...staffBody, table: '7' } });
+  check(staffOrder.status === 201 && staffOrder.data.fulfillment === 'dine_in' && staffOrder.data.paid === true
+    && staffOrder.data.customer_name === 'Mesa 7' && staffOrder.data.total === expected, `Modo mesero: pedido #${staffOrder.data.id} para la mesa 7`);
+  const staffList = await call('/api/mesero/orders');
+  check(staffList.data?.some?.((o) => o.id === staffOrder.data.id), 'Modo mesero: lista de pedidos en curso');
+  if (staffOrder.status === 201) await call(`/api/admin/orders/${staffOrder.data.id}`, { method: 'PATCH', body: { status: 'cancelado' } });
+}
 
 if (order.status === 201) {
   const upd = await call(`/api/admin/orders/${order.data.id}`, { method: 'PATCH', body: { status: 'cancelado' } });

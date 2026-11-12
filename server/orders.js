@@ -14,7 +14,8 @@ export const STATUS_LABELS = {
   cancelado: 'Cancelado',
 };
 export const PAYMENT_LABELS = { cash: 'Efectivo', transfer: 'Transferencia' };
-export const FULFILLMENT_LABELS = { delivery: 'Envío a domicilio', pickup: 'Recoger en tienda' };
+export const FULFILLMENT_LABELS = { delivery: 'Envío a domicilio', pickup: 'Recoger en tienda', dine_in: 'Comer aquí' };
+export const FULFILLMENTS = Object.keys(FULFILLMENT_LABELS);
 
 /* ------------------------------------------------------------------ */
 /* Crear pedido: valida todo y calcula precios en el servidor          */
@@ -67,9 +68,11 @@ export function isAvailable(p, cat) {
 
 /**
  * quote: cotización por distancia calculada en el servidor (quoteDelivery) cuando el envío es por km.
+ * staff: pedido capturado por un mesero (modo mesero). Puede ser "comer aquí" con mesa, no exige teléfono
+ *        (salvo a domicilio), ignora tienda cerrada / pedido mínimo y puede marcarse como ya pagado.
  */
-export function buildOrder(input, s, cat, { quote = null } = {}) {
-  if (s.store_open !== '1') throw new HttpError(409, s.closed_message || 'Por ahora no estamos recibiendo pedidos.');
+export function buildOrder(input, s, cat, { quote = null, staff = null } = {}) {
+  if (!staff && s.store_open !== '1') throw new HttpError(409, s.closed_message || 'Por ahora no estamos recibiendo pedidos.');
   input = input || {};
 
   const rawItems = Array.isArray(input.items) ? input.items : [];
@@ -118,19 +121,26 @@ export function buildOrder(input, s, cat, { quote = null } = {}) {
   subtotal = round2(subtotal);
 
   const minOrder = Number(s.min_order) || 0;
-  if (minOrder > 0 && subtotal < minOrder) {
+  if (!staff && minOrder > 0 && subtotal < minOrder) {
     throw new HttpError(400, `El pedido mínimo es de ${money(minOrder, s)}`);
   }
 
-  const customer_name = str(input.customer_name, 80);
-  if (customer_name.length < 2) throw new HttpError(400, 'Escribe tu nombre');
-  const customer_phone = str(input.customer_phone, 30).replace(/[^\d+]/g, '');
-  if (customer_phone.replace(/\D/g, '').length < 8) throw new HttpError(400, 'Escribe un teléfono válido (al menos 8 dígitos)');
+  const fulfillment = staff && input.fulfillment === 'dine_in' ? 'dine_in' : input.fulfillment === 'pickup' ? 'pickup' : 'delivery';
+  const table = fulfillment === 'dine_in' ? str(input.table, 20) : '';
+  if (fulfillment === 'dine_in' && !table) throw new HttpError(400, 'Escribe el número de mesa');
 
-  const fulfillment = input.fulfillment === 'pickup' ? 'pickup' : 'delivery';
+  let customer_name = str(input.customer_name, 80);
+  if (!customer_name && table) customer_name = `Mesa ${table}`;
+  if (customer_name.length < 2) throw new HttpError(400, staff ? 'Escribe el nombre del cliente' : 'Escribe tu nombre');
+  const customer_phone = str(input.customer_phone, 30).replace(/[^\d+]/g, '');
+  const needsPhone = !staff || fulfillment === 'delivery' || customer_phone;
+  if (needsPhone && customer_phone.replace(/\D/g, '').length < 8) throw new HttpError(400, 'Escribe un teléfono válido (al menos 8 dígitos)');
+
   let address = null, address_ref = null, zone = null, delivery_fee = 0, location = null;
-  if (fulfillment === 'pickup') {
-    if (s.pickup_enabled !== '1') throw new HttpError(400, 'La opción de recoger no está disponible');
+  if (fulfillment === 'dine_in') {
+    // en el local: sin envío
+  } else if (fulfillment === 'pickup') {
+    if (!staff && s.pickup_enabled !== '1') throw new HttpError(400, 'La opción de recoger no está disponible');
   } else {
     if (s.delivery_enabled !== '1') throw new HttpError(400, 'El envío a domicilio no está disponible');
     address = str(input.address, 300);
@@ -154,8 +164,8 @@ export function buildOrder(input, s, cat, { quote = null } = {}) {
 
   const payment_method = input.payment_method === 'transfer' ? 'transfer' : input.payment_method === 'cash' ? 'cash' : null;
   if (!payment_method) throw new HttpError(400, 'Elige un método de pago');
-  if (payment_method === 'cash' && s.cash_enabled !== '1') throw new HttpError(400, 'El pago en efectivo no está disponible');
-  if (payment_method === 'transfer' && s.transfer_enabled !== '1') throw new HttpError(400, 'El pago por transferencia no está disponible');
+  if (!staff && payment_method === 'cash' && s.cash_enabled !== '1') throw new HttpError(400, 'El pago en efectivo no está disponible');
+  if (!staff && payment_method === 'transfer' && s.transfer_enabled !== '1') throw new HttpError(400, 'El pago por transferencia no está disponible');
 
   let cash_amount = null;
   if (payment_method === 'cash' && input.cash_amount !== undefined && input.cash_amount !== null && input.cash_amount !== '') {
@@ -169,6 +179,8 @@ export function buildOrder(input, s, cat, { quote = null } = {}) {
   return {
     customer: { name: customer_name, phone: customer_phone },
     fulfillment, address, address_ref,
+    ...(table ? { table } : {}),
+    ...(staff ? { source: 'mesero', taken_by: str(staff.name, 40) || null, paid: input.paid === true } : {}),
     zone: zone ? { id: zone.id, name: zone.name } : null,
     location,
     delivery_fee, subtotal, total, payment_method, cash_amount,
@@ -208,6 +220,10 @@ export function present(o) {
     status_label: STATUS_LABELS[o.status] || o.status,
     customer: o.customer,
     fulfillment: o.fulfillment,
+    fulfillment_label: FULFILLMENT_LABELS[o.fulfillment] || o.fulfillment,
+    table: o.table ?? null,
+    source: o.source || 'web',
+    taken_by: o.taken_by ?? null,
     address: o.address ?? null,
     address_ref: o.address_ref ?? null,
     zone: o.zone ?? null,
@@ -362,7 +378,7 @@ export function formatDriverText(o, s) {
   const m = (n) => money(n, s);
   const L = [`🛵 *PEDIDO #${o.id}* · ${s.business_name || ''}`.trim(), ''];
   L.push(`👤 *Nombre:* ${o.customer.name}`);
-  L.push(`📱 *Celular:* ${o.customer.phone}`);
+  if (o.customer.phone) L.push(`📱 *Celular:* ${o.customer.phone}`);
   if (o.fulfillment === 'delivery') {
     L.push(`📍 *Dirección:* ${o.address}`);
     if (o.address_ref) L.push(`🏠 *Referencias:* ${o.address_ref}`);
@@ -398,14 +414,17 @@ export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}
   } else {
     L.push(`🥣 NUEVO PEDIDO #${o.id}`);
   }
-  L.push(`Cliente: ${o.customer.name} · ${o.customer.phone}`);
-  if (o.fulfillment === 'delivery') {
+  if (!forCustomer && o.source === 'mesero') L.push(`🧑‍🍳 Lo tomó: ${o.taken_by || 'mesero'}`);
+  L.push(`Cliente: ${o.customer.name}${o.customer.phone ? ` · ${o.customer.phone}` : ''}`);
+  if (o.fulfillment === 'dine_in') {
+    L.push(`🍽️ Comer aquí · Mesa ${o.table}`);
+  } else if (o.fulfillment === 'delivery') {
     L.push(`Envío a domicilio${o.zone ? ` (${o.zone.name})` : ''}${o.location ? ` · ${o.location.distance_km} km` : ''}`);
     L.push(`Dirección: ${o.address}`);
     if (o.address_ref) L.push(`Referencias: ${o.address_ref}`);
     if (o.location) L.push(`Ubicación: ${mapsLink(o)}`);
   } else {
-    L.push('Recoge en tienda');
+    L.push(o.source === 'mesero' ? 'Para llevar' : 'Recoge en tienda');
   }
   L.push('');
   for (const it of o.items) {
@@ -419,6 +438,7 @@ export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}
   L.push(`TOTAL: ${m(o.total)}`);
   let pay = `Pago: ${PAYMENT_LABELS[o.payment_method]}`;
   if (o.payment_method === 'cash' && o.cash_amount) pay += ` (paga con ${m(o.cash_amount)}, cambio ${m(o.change_due)})`;
+  if (o.paid) pay += ' · ✅ ya pagado';
   L.push(pay);
   if (o.notes) L.push(`Notas: ${o.notes}`);
   if (baseUrl) {

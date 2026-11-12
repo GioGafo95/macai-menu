@@ -29,7 +29,7 @@ Lista pedidos (más recientes primero).
 | `updated_since`  | `2026-11-11T15:00:00Z`     | Solo pedidos creados **o modificados** después de esta fecha. Ideal para sincronizar. Ordena por `updated_at`. |
 | `status`         | `entregado` o `nuevo,listo`| Uno o varios estados separados por coma |
 | `paid`           | `true` / `false`           | Filtra por pagado |
-| `fulfillment`    | `delivery` / `pickup`      | Tipo de entrega |
+| `fulfillment`    | `delivery` / `pickup` / `dine_in` | Tipo de entrega (`dine_in` = comer aquí, capturado en modo mesero) |
 | `payment_method` | `cash` / `transfer`        | Método de pago |
 | `limit`          | `100`                      | 1–500 (default 100) |
 | `offset`         | `0`                        | Paginación |
@@ -70,6 +70,10 @@ Estados: `nuevo`, `preparando`, `listo`, `en_camino`, `entregado`, `cancelado`.
   "status_label": "Entregado",
   "customer": { "name": "Ana", "phone": "5512345678" },
   "fulfillment": "delivery",
+  "fulfillment_label": "Envío a domicilio",
+  "table": null,
+  "source": "web",
+  "taken_by": null,
   "address": "Calle 1 #23",
   "address_ref": "Casa azul",
   "zone": { "id": 1, "name": "Centro" },
@@ -97,6 +101,9 @@ Estados: `nuevo`, `preparando`, `listo`, `en_camino`, `entregado`, `cancelado`.
   ]
 }
 ```
+
+- `source`: `web` (lo hizo el cliente) o `mesero` (lo capturó el personal en `/mesero/`; `taken_by` es el nombre del mesero).
+- `table`: número de mesa cuando `fulfillment` es `dine_in`. En pedidos de mesero el teléfono puede venir vacío.
 
 - Fechas en ISO 8601 UTC.
 - `unit_price` ya incluye el precio de los toppings.

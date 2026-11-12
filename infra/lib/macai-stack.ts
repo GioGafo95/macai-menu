@@ -116,15 +116,15 @@ export class MacaiStack extends Stack {
 
     /* ------------------------------ CloudFront ------------------------------ */
 
-    // "/admin/" → "/admin/index.html", "/admin" → redirección a "/admin/"
+    // "/admin/" → "/admin/index.html", "/admin" → redirección a "/admin/" (igual con /mesero)
     const pagesFn = new cloudfront.Function(this, 'PagesRewrite', {
       runtime: cloudfront.FunctionRuntime.JS_2_0,
       comment: 'Rutas de carpeta a index.html',
       code: cloudfront.FunctionCode.fromInline(`
 function handler(event) {
   var r = event.request;
-  if (r.uri === '/admin') {
-    return { statusCode: 301, statusDescription: 'Moved', headers: { location: { value: '/admin/' } } };
+  if (r.uri === '/admin' || r.uri === '/mesero') {
+    return { statusCode: 301, statusDescription: 'Moved', headers: { location: { value: r.uri + '/' } } };
   }
   if (r.uri.endsWith('/')) r.uri += 'index.html';
   return r;
@@ -193,6 +193,7 @@ function handler(event) {
 
     new CfnOutput(this, 'Url', { value: `https://${distribution.distributionDomainName}`, description: 'Menú para clientes' });
     new CfnOutput(this, 'AdminUrl', { value: `https://${distribution.distributionDomainName}/admin/`, description: 'Panel de administración' });
+    new CfnOutput(this, 'MeseroUrl', { value: `https://${distribution.distributionDomainName}/mesero/`, description: 'Modo mesero (tomar pedidos)' });
     new CfnOutput(this, 'TableName', { value: table.tableName });
     new CfnOutput(this, 'FunctionName', { value: api.functionName });
   }

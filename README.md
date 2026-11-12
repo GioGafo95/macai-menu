@@ -4,6 +4,7 @@ Menú digital y sistema de pedidos para negocio de comida saludable.
 
 - **Clientes** (`/`): ven el menú desde el celular, personalizan con toppings y notas, eligen envío a domicilio (con costo por zona) o recoger en tienda, y pagan en efectivo o transferencia. Reciben un enlace para seguir el estado de su pedido y un botón para mandarlo por WhatsApp.
 - **Admin** (`/admin/`): productos, precios, fotos, categorías, toppings, zonas de envío, pedidos en tiempo real con sonido, estados, cobro y ajustes.
+- **Modo mesero** (`/mesero/`): el personal toma pedidos desde su celular (comer aquí con número de mesa, para llevar o a domicilio) y ve cuáles ya están listos. Se activa en el panel → Ajustes → Modo mesero, con una contraseña propia que no da acceso al panel.
 - **Notificaciones** al celular por cada pedido: Telegram (gratis), WhatsApp vía CallMeBot (gratis) o Twilio (SMS, WhatsApp o llamada).
 - **API REST + webhook** para conectar tu sistema de registro de ventas → [docs/API.md](docs/API.md).
 
@@ -29,6 +30,7 @@ npm run dev
 
 - Menú: http://localhost:3000/
 - Panel: http://localhost:3000/admin/
+- Modo mesero: http://localhost:3000/mesero/
 
 La primera vez se carga el **menú de Macaí Bowls** (bowls, chilibowls, toppings y smoothies), definido en `server/catalog.js`. Edítalo desde el panel.
 

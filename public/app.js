@@ -1,15 +1,20 @@
 import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor } from './common.js';
 import { createMap, searchAddress, reverseAddress, currentPosition } from './map.js';
 
-const CART_KEY = 'macai_cart';
-const CUSTOMER_KEY = 'macai_customer';
+// Modo mesero (/mesero/): la misma página, pero el personal captura el pedido del cliente.
+const STAFF = document.body.dataset.mode === 'mesero';
+const API = STAFF ? '/api/mesero' : '/api/public';
+const CART_KEY = STAFF ? 'macai_mesero_cart' : 'macai_cart';
+const CUSTOMER_KEY = STAFF ? 'macai_mesero_prefs' : 'macai_customer';
 const LAST_ORDER_KEY = 'macai_last_order';
+const WAITER_KEY = 'macai_mesero_nombre';
 
-let menu = null;          // respuesta de /api/public/menu
+let menu = null;          // respuesta de /api/public/menu (o /api/mesero/menu)
 let S = {};               // ajustes públicos
 let cart = store.get(CART_KEY, []);
+const BLANK = { customer_name: '', customer_phone: '', address: '', address_ref: '', zone_id: '', location: null, fulfillment: '', payment_method: '', cash_amount: '', notes: '', table: '', paid: false };
 const checkout = Object.assign(
-  { customer_name: '', customer_phone: '', address: '', address_ref: '', zone_id: '', location: null, fulfillment: '', payment_method: '', cash_amount: '', notes: '' },
+  { ...BLANK },
   store.get(CUSTOMER_KEY, {}),
   { cash_amount: '', notes: '' },
 );
@@ -18,14 +23,22 @@ const checkout = Object.assign(
 
 async function init() {
   try {
-    menu = await api('/api/public/menu');
+    menu = await api(`${API}/menu`);
   } catch (e) {
+    if (STAFF && e.status === 401) return staffLogin();
     $('#menu').innerHTML = `<div class="empty"><div class="big">😕</div><p>No pudimos cargar el menú.<br>${esc(e.message)}</p>
       <button class="btn" onclick="location.reload()">Reintentar</button></div>`;
     return;
   }
   S = menu.settings;
   setCurrency(S.locale, S.currency);
+  if (STAFF) {
+    staffReady();
+    sanitizeCart();
+    renderMenu();
+    renderCartBar();
+    return;
+  }
   document.title = `${S.business_name} · Haz tu pedido`;
   $('#biz-name').textContent = S.business_name;
   $('#biz-tagline').textContent = S.tagline || '';
@@ -147,7 +160,7 @@ function openProduct(p, editKey) {
   let qty = editing?.quantity || 1;
   const groups = p.groups.map((id) => menu.groups[id]).filter(Boolean);
   const selected = new Set(editing?.toppings || []);
-  const closed = S.store_open !== '1';
+  const closed = !STAFF && S.store_open !== '1';
 
   const sheet = openSheet(`
     <div class="sheet-head">
@@ -221,7 +234,7 @@ function openProduct(p, editKey) {
     if (incBox) {
       const n = p.included_count;
       incBox.innerHTML = pricing.left > 0
-        ? `🎁 Tu bowl incluye <strong>${n} ${n === 1 ? 'opción' : 'opciones'}</strong> sin costo. Te ${pricing.left === 1 ? 'queda' : 'quedan'} <strong>${pricing.left}</strong>.`
+        ? `🎁 Incluye <strong>${n} ${n === 1 ? 'opción' : 'opciones'}</strong> sin costo. Te ${pricing.left === 1 ? 'queda' : 'quedan'} <strong>${pricing.left}</strong>.`
         : `✅ Ya elegiste tus ${n} incluidas. Las siguientes tienen costo extra.`;
       incBox.classList.toggle('done', pricing.left === 0);
     }
@@ -361,7 +374,7 @@ function deliveryFee(sub) {
 function openCart() {
   if (!cart.length) { closeSheet(); return; }
   const sheet = openSheet(`
-    <div class="sheet-title"><h2>Tu pedido</h2><button class="icon-btn" data-close aria-label="Cerrar">×</button></div>
+    <div class="sheet-title"><h2>${STAFF ? 'Pedido' : 'Tu pedido'}</h2><button class="icon-btn" data-close aria-label="Cerrar">×</button></div>
     <div class="sheet-body">
       ${cart.map((i) => {
         const { p, opts, total } = itemInfo(i);
@@ -384,13 +397,14 @@ function openCart() {
       }).join('')}
       <button class="btn btn-ghost btn-block" style="margin-top:14px" data-close>+ Agregar más productos</button>
       <div class="totals"><div class="row total"><span>Subtotal</span><span>${money(subtotal())}</span></div></div>
-      ${Number(S.min_order) > 0 && subtotal() < Number(S.min_order)
+      ${!STAFF && Number(S.min_order) > 0 && subtotal() < Number(S.min_order)
         ? `<div class="box warn">El pedido mínimo es de ${money(S.min_order)}. Te faltan ${money(Number(S.min_order) - subtotal())}.</div>` : ''}
     </div>
     <div class="sheet-foot">
+      ${STAFF ? '<button class="btn btn-lg btn-block" data-next>Continuar</button>' : `
       <button class="btn btn-lg btn-block" data-next ${S.store_open !== '1' || (Number(S.min_order) > 0 && subtotal() < Number(S.min_order)) ? 'disabled' : ''}>
         ${S.store_open !== '1' ? 'Estamos cerrados' : 'Continuar'}
-      </button>
+      </button>`}
     </div>`);
 
   sheet.addEventListener('click', (e) => {
@@ -420,37 +434,46 @@ function openCart() {
 
 function openCheckout() {
   const canDeliver = S.delivery_enabled === '1';
-  const canPickup = S.pickup_enabled === '1';
-  if (!checkout.fulfillment || (checkout.fulfillment === 'delivery' && !canDeliver) || (checkout.fulfillment === 'pickup' && !canPickup)) {
-    checkout.fulfillment = canDeliver ? 'delivery' : 'pickup';
+  const canPickup = STAFF || S.pickup_enabled === '1';
+  if (!checkout.fulfillment || (checkout.fulfillment === 'delivery' && !canDeliver) || (checkout.fulfillment === 'pickup' && !canPickup)
+    || (checkout.fulfillment === 'dine_in' && !STAFF)) {
+    checkout.fulfillment = STAFF ? 'dine_in' : canDeliver ? 'delivery' : 'pickup';
   }
-  const canCash = S.cash_enabled === '1';
-  const canTransfer = S.transfer_enabled === '1';
+  const canCash = STAFF || S.cash_enabled === '1';
+  const canTransfer = STAFF || S.transfer_enabled === '1';
+
+  const whoHtml = `
+      <div class="field">
+        <label for="c-name">${STAFF ? 'Nombre del cliente' : 'Tu nombre'} <span class="muted small" data-opt-name>(opcional)</span></label>
+        <input class="input" id="c-name" name="customer_name" autocomplete="${STAFF ? 'off' : 'name'}" maxlength="80" required value="${esc(checkout.customer_name)}">
+      </div>
+      <div class="field" data-phone>
+        <label for="c-phone">${STAFF ? 'Teléfono del cliente' : 'Teléfono / WhatsApp'} <span class="muted small" data-opt-phone>(opcional)</span></label>
+        <input class="input" id="c-phone" name="customer_phone" type="tel" inputmode="tel" autocomplete="${STAFF ? 'off' : 'tel'}" maxlength="20" required value="${esc(checkout.customer_phone)}" placeholder="10 dígitos">
+      </div>`;
+  const fulHtml = `
+      <div class="field">
+        <span class="label">${STAFF ? 'Tipo de pedido' : '¿Cómo lo quieres?'}</span>
+        <div class="choice-row">
+          ${STAFF ? '<button type="button" class="choice" data-ful="dine_in"><span class="ico">🍽️</span><strong>Comer aquí</strong><small>En el local</small></button>' : ''}
+          ${canPickup ? `<button type="button" class="choice" data-ful="pickup"><span class="ico">${STAFF ? '🥡' : '🏪'}</span><strong>${STAFF ? 'Para llevar' : 'Recoger'}</strong><small>${STAFF ? 'Se lo lleva' : 'Sin costo de envío'}</small></button>` : ''}
+          ${canDeliver ? `<button type="button" class="choice" data-ful="delivery"><span class="ico">🛵</span><strong>A domicilio</strong><small data-fee-label></small></button>` : ''}
+        </div>
+      </div>
+      ${STAFF ? `<div class="field" data-dinein>
+        <label for="c-table">Número de mesa</label>
+        <input class="input" id="c-table" name="table" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Ej. 4" value="${esc(checkout.table)}">
+      </div>` : ''}`;
   if ((checkout.payment_method === 'cash' && !canCash) || (checkout.payment_method === 'transfer' && !canTransfer)) checkout.payment_method = '';
   if (!checkout.payment_method && canCash !== canTransfer) checkout.payment_method = canCash ? 'cash' : 'transfer';
 
   const sheet = openSheet(`
     <div class="sheet-title">
-      <div class="steps-title"><button class="icon-btn" data-back aria-label="Regresar">‹</button><h2>Datos de entrega</h2></div>
+      <div class="steps-title"><button class="icon-btn" data-back aria-label="Regresar">‹</button><h2>${STAFF ? 'Datos del pedido' : 'Datos de entrega'}</h2></div>
       <button class="icon-btn" data-close aria-label="Cerrar">×</button>
     </div>
     <form class="sheet-body" id="checkout-form" novalidate>
-      <div class="field">
-        <label for="c-name">Tu nombre</label>
-        <input class="input" id="c-name" name="customer_name" autocomplete="name" maxlength="80" required value="${esc(checkout.customer_name)}">
-      </div>
-      <div class="field">
-        <label for="c-phone">Teléfono / WhatsApp</label>
-        <input class="input" id="c-phone" name="customer_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required value="${esc(checkout.customer_phone)}" placeholder="10 dígitos">
-      </div>
-
-      <div class="field">
-        <span class="label">¿Cómo lo quieres?</span>
-        <div class="choice-row">
-          ${canDeliver ? `<button type="button" class="choice" data-ful="delivery"><span class="ico">🛵</span><strong>A domicilio</strong><small data-fee-label></small></button>` : ''}
-          ${canPickup ? `<button type="button" class="choice" data-ful="pickup"><span class="ico">🏪</span><strong>Recoger</strong><small>Sin costo de envío</small></button>` : ''}
-        </div>
-      </div>
+      ${STAFF ? fulHtml + whoHtml : whoHtml + fulHtml}
 
       <div data-delivery>
         ${byDistance() ? `
@@ -463,8 +486,8 @@ function openCheckout() {
             <div class="search-results hidden" data-results></div>
             <div class="map-box" data-map><div class="map-loading">Cargando mapa…</div></div>
             <div class="map-actions">
-              <button type="button" class="link-btn" data-locate>🎯 Usar mi ubicación actual</button>
-              <span class="muted small">o toca el mapa / arrastra el pin 🏠</span>
+              ${STAFF ? '' : '<button type="button" class="link-btn" data-locate>🎯 Usar mi ubicación actual</button>'}
+              <span class="muted small">${STAFF ? 'Toca el mapa o arrastra el pin 🏠 hasta la casa del cliente' : 'o toca el mapa / arrastra el pin 🏠'}</span>
             </div>
             <div class="quote-box hidden" data-quote role="status"></div>
           </div>` : ''}
@@ -486,22 +509,24 @@ function openCheckout() {
         </div>
       </div>
       <div data-pickup>
-        ${S.pickup_address ? `<div class="box">📍 Recoges en: ${esc(S.pickup_address)}</div>` : ''}
+        ${!STAFF && S.pickup_address ? `<div class="box">📍 Recoges en: ${esc(S.pickup_address)}</div>` : ''}
       </div>
 
       <div class="field">
         <span class="label">Método de pago</span>
         <div class="choice-row">
-          ${canCash ? '<button type="button" class="choice" data-pay="cash"><span class="ico">💵</span><strong>Efectivo</strong><small>Pagas al recibir</small></button>' : ''}
-          ${canTransfer ? '<button type="button" class="choice" data-pay="transfer"><span class="ico">🏦</span><strong>Transferencia</strong><small>Te damos los datos</small></button>' : ''}
+          ${canCash ? `<button type="button" class="choice" data-pay="cash"><span class="ico">💵</span><strong>Efectivo</strong><small>${STAFF ? 'En caja o al entregar' : 'Pagas al recibir'}</small></button>` : ''}
+          ${canTransfer ? `<button type="button" class="choice" data-pay="transfer"><span class="ico">🏦</span><strong>Transferencia</strong><small>${STAFF ? 'O pago con tarjeta' : 'Te damos los datos'}</small></button>` : ''}
         </div>
       </div>
+      ${STAFF ? `<label class="option paid-option"><input type="checkbox" name="paid" ${checkout.paid ? 'checked' : ''}>
+        <span class="opt-name">✅ Ya pagó<small>Márcalo si el cliente ya pagó en caja</small></span></label>` : ''}
       <div data-cash class="field">
         <label for="c-cash">¿Con cuánto pagas? <span class="muted small">(opcional, para llevar cambio)</span></label>
         <input class="input" id="c-cash" name="cash_amount" type="number" inputmode="decimal" min="0" step="1" placeholder="Ej. 500" value="${esc(checkout.cash_amount)}">
       </div>
       <div data-transfer>
-        ${S.bank_info ? `<div class="box"><strong>Datos para transferir</strong>\n${esc(S.bank_info)}</div>
+        ${!STAFF && S.bank_info ? `<div class="box"><strong>Datos para transferir</strong>\n${esc(S.bank_info)}</div>
         <p class="muted small" style="margin:6px 2px 0">Envíanos tu comprobante por WhatsApp después de confirmar.</p>` : ''}
       </div>
 
@@ -514,13 +539,14 @@ function openCheckout() {
       <div class="error-msg hidden" data-error role="alert"></div>
     </form>
     <div class="sheet-foot">
-      <button class="btn btn-lg btn-block" data-submit>Confirmar pedido</button>
+      <button class="btn btn-lg btn-block" data-submit>${STAFF ? 'Enviar a cocina' : 'Confirmar pedido'}</button>
     </div>`);
 
   const form = $('#checkout-form', sheet);
 
   function sync() {
-    for (const el of form.elements) if (el.name) checkout[el.name] = el.value;
+    for (const el of form.elements) if (el.name) checkout[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+    if (STAFF) { store.set(CUSTOMER_KEY, { fulfillment: checkout.fulfillment }); return; } // cada pedido es otro cliente
     store.set(CUSTOMER_KEY, {
       customer_name: checkout.customer_name, customer_phone: checkout.customer_phone,
       address: checkout.address, address_ref: checkout.address_ref, zone_id: checkout.zone_id,
@@ -533,6 +559,9 @@ function openCheckout() {
     $$('[data-pay]', sheet).forEach((b) => b.classList.toggle('active', b.dataset.pay === checkout.payment_method));
     $('[data-delivery]', sheet).classList.toggle('hidden', checkout.fulfillment !== 'delivery');
     $('[data-pickup]', sheet).classList.toggle('hidden', checkout.fulfillment !== 'pickup');
+    $('[data-dinein]', sheet)?.classList.toggle('hidden', checkout.fulfillment !== 'dine_in');
+    $('[data-opt-name]', sheet).classList.toggle('hidden', !(STAFF && checkout.fulfillment === 'dine_in'));
+    $('[data-opt-phone]', sheet).classList.toggle('hidden', !(STAFF && checkout.fulfillment !== 'delivery'));
     $('[data-cash]', sheet).classList.toggle('hidden', checkout.payment_method !== 'cash');
     $('[data-transfer]', sheet).classList.toggle('hidden', checkout.payment_method !== 'transfer');
 
@@ -552,7 +581,7 @@ function openCheckout() {
       <div class="row total"><span>Total</span><span>${money(total)}</span></div>
       ${Number(S.free_delivery_over) > 0 && checkout.fulfillment === 'delivery' && sub < Number(S.free_delivery_over)
         ? `<p class="muted small">Agrega ${money(Number(S.free_delivery_over) - sub)} más y tu envío es gratis.</p>` : ''}`;
-    $('[data-submit]', sheet).textContent = `Confirmar pedido · ${money(total)}`;
+    $('[data-submit]', sheet).textContent = `${STAFF ? 'Enviar a cocina' : 'Confirmar pedido'} · ${money(total)}`;
     if (byDistance() && checkout.fulfillment === 'delivery') ensureMap();
   }
 
@@ -598,12 +627,12 @@ function openCheckout() {
     quote = null;
     update();
     try {
-      const q = await api('/api/public/delivery-quote', { method: 'POST', body: point });
+      const q = await api(`${API}/delivery-quote`, { method: 'POST', body: point });
       if (seq !== quoteSeq) return;
       quote = q;
       box.className = `quote-box ${q.available ? 'ok' : 'warn'}`;
       box.innerHTML = q.available
-        ? `🛵 Estás a <strong>${q.distance_km} km</strong> · Envío <strong>${money(q.fee)}</strong>`
+        ? `🛵 ${STAFF ? 'Está' : 'Estás'} a <strong>${q.distance_km} km</strong> · Envío <strong>${money(q.fee)}</strong>`
         : esc(q.message);
     } catch (e) {
       if (seq !== quoteSeq) return;
@@ -672,8 +701,13 @@ function openCheckout() {
     if (sending) return;
     sync();
     $('[data-error]', sheet).classList.add('hidden');
-    if (checkout.customer_name.trim().length < 2) return fail('Escribe tu nombre', 'customer_name');
-    if (checkout.customer_phone.replace(/\D/g, '').length < 8) return fail('Escribe un teléfono válido', 'customer_phone');
+    const dineIn = STAFF && checkout.fulfillment === 'dine_in';
+    if (dineIn && !String(checkout.table).trim()) return fail('Escribe el número de mesa', 'table');
+    if (!dineIn && checkout.customer_name.trim().length < 2) return fail(STAFF ? 'Escribe el nombre del cliente' : 'Escribe tu nombre', 'customer_name');
+    if (dineIn && checkout.customer_name.trim().length === 1) return fail('Escribe el nombre completo o déjalo vacío', 'customer_name');
+    const phoneDigits = checkout.customer_phone.replace(/\D/g, '').length;
+    const phoneNeeded = !STAFF || checkout.fulfillment === 'delivery' || phoneDigits > 0;
+    if (phoneNeeded && phoneDigits < 8) return fail('Escribe un teléfono válido', 'customer_phone');
     if (checkout.fulfillment === 'delivery') {
       if (byDistance()) {
         if (!checkout.location) return fail('Marca en el mapa a dónde te lo llevamos');
@@ -689,7 +723,7 @@ function openCheckout() {
     btn.disabled = true;
     btn.textContent = 'Enviando pedido…';
     try {
-      const res = await api('/api/public/orders', {
+      const res = await api(`${API}/orders`, {
         method: 'POST',
         body: {
           items: cart.map((i) => ({ product_id: i.product_id, quantity: i.quantity, toppings: i.toppings, note: i.note })),
@@ -703,8 +737,10 @@ function openCheckout() {
           payment_method: checkout.payment_method,
           cash_amount: checkout.payment_method === 'cash' && checkout.cash_amount ? Number(checkout.cash_amount) : null,
           notes: checkout.notes,
+          ...(STAFF ? { table: checkout.table, paid: !!checkout.paid, taken_by: store.get(WAITER_KEY, '') } : {}),
         },
       });
+      if (STAFF) return staffSent(res);
       cart = [];
       store.del(CART_KEY);
       store.set(LAST_ORDER_KEY, { token: res.token, id: res.id });
@@ -713,10 +749,11 @@ function openCheckout() {
       sending = false;
       btn.disabled = false;
       update();
+      if (STAFF && e.status === 401) { closeSheet(); return staffLogin(); }
       fail(e.message);
       if (/disponible|carrito/i.test(e.message)) {
         // El menú cambió: recargar datos
-        menu = await api('/api/public/menu').catch(() => menu);
+        menu = await api(`${API}/menu`).catch(() => menu);
         S = menu.settings;
         sanitizeCart();
       }
@@ -724,6 +761,141 @@ function openCheckout() {
   }
 
   update();
+}
+
+/* ============================== Modo mesero ============================== */
+
+function staffLogin() {
+  $('#staff-bar')?.classList.add('hidden');
+  $('#cats').innerHTML = '';
+  $('#cart-bar').classList.add('hidden');
+  $('#menu').innerHTML = `
+    <form class="staff-login" id="staff-login" novalidate>
+      <img src="/logo.png" alt="Macaí Bowls" class="staff-login-logo">
+      <h2>Modo mesero</h2>
+      <p class="muted">Entra con la contraseña de meseros que te dio el encargado.</p>
+      <input class="input" type="password" name="password" autocomplete="current-password" placeholder="Contraseña" required>
+      <div class="error-msg hidden" data-error role="alert"></div>
+      <button class="btn btn-lg btn-block">Entrar</button>
+    </form>`;
+  const form = $('#staff-login');
+  form.elements.password.focus();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('button', form);
+    btn.disabled = true;
+    try {
+      await api(`${API}/login`, { method: 'POST', body: { password: form.elements.password.value } });
+      init();
+    } catch (ex) {
+      btn.disabled = false;
+      const box = $('[data-error]', form);
+      box.textContent = ex.message;
+      box.classList.remove('hidden');
+    }
+  });
+}
+
+function staffReady() {
+  document.title = `Mesero · ${S.business_name}`;
+  $('#staff-bar').classList.remove('hidden');
+  renderWaiterName();
+  if (!store.get(WAITER_KEY, '')) askWaiterName();
+}
+
+function renderWaiterName() {
+  $('#waiter-name').textContent = store.get(WAITER_KEY, '') || 'Tu nombre';
+}
+
+function askWaiterName() {
+  const sheet = openSheet(`
+    <div class="sheet-title"><h2>¿Quién toma los pedidos?</h2><button class="icon-btn" data-close aria-label="Cerrar">×</button></div>
+    <form class="sheet-body" id="waiter-form" novalidate>
+      <p class="muted" style="margin-top:0">Tu nombre aparece en cada pedido que envíes a cocina.</p>
+      <input class="input" name="name" maxlength="40" autocomplete="given-name" placeholder="Ej. Ana" value="${esc(store.get(WAITER_KEY, ''))}">
+    </form>
+    <div class="sheet-foot"><button class="btn btn-lg btn-block" data-save>Guardar</button></div>`);
+  const form = $('#waiter-form', sheet);
+  const save = () => {
+    const name = form.elements.name.value.trim();
+    if (name.length < 2) { form.elements.name.focus(); return; }
+    store.set(WAITER_KEY, name);
+    renderWaiterName();
+    closeSheet();
+  };
+  form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
+  $('[data-save]', sheet).addEventListener('click', save);
+  setTimeout(() => form.elements.name.focus(), 50);
+}
+
+function staffSent(res) {
+  cart = [];
+  store.del(CART_KEY);
+  Object.assign(checkout, { ...BLANK, fulfillment: checkout.fulfillment });
+  saveCart();
+  const sheet = openSheet(`
+    <div class="sheet-body staff-sent">
+      <div class="big">✅</div>
+      <h2>Pedido #${res.id} enviado a cocina</h2>
+      <p class="muted">${esc(res.fulfillment === 'dine_in' ? `Mesa ${res.table}` : res.customer_name)} · ${money(res.total)}${res.paid ? ' · pagado' : ''}</p>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-light btn-lg" data-orders>Ver pedidos</button>
+      <button class="btn btn-lg" style="flex:1" data-close>Nuevo pedido</button>
+    </div>`);
+  $('[data-orders]', sheet).addEventListener('click', openStaffOrders);
+}
+
+let ordersTimer = null;
+async function openStaffOrders() {
+  clearTimeout(ordersTimer);
+  let list;
+  try {
+    list = await api(`${API}/orders`);
+  } catch (e) {
+    if (e.status === 401) { closeSheet(); return staffLogin(); }
+    return toast(e.message, 4000);
+  }
+  const sheet = openSheet(`
+    <div class="sheet-title"><h2>Pedidos en curso</h2><button class="icon-btn" data-close aria-label="Cerrar">×</button></div>
+    <div class="sheet-body">
+      ${list.length ? list.map((o) => `
+        <div class="staff-order s-${o.status}">
+          <div class="staff-order-head">
+            <strong>#${o.id}</strong>
+            <span>${o.fulfillment === 'dine_in' ? `🍽️ Mesa ${esc(o.table)}` : o.fulfillment === 'pickup' ? '🥡 Para llevar' : '🛵 Domicilio'}</span>
+            <span class="status-pill s-${o.status}">${esc(o.status_label)}</span>
+          </div>
+          <div class="muted small">${esc(o.customer_name)}${o.taken_by ? ` · tomó ${esc(o.taken_by)}` : ''} · ${money(o.total)} ${o.paid ? '· ✅ pagado' : '· sin pagar'}</div>
+          <div class="small">${o.items.map((i) => `${i.quantity}× ${esc(i.name)}`).join(', ')}</div>
+          ${o.status === 'listo' && o.fulfillment !== 'delivery' ? `<button class="btn btn-sm" data-delivered="${o.id}">📦 Ya lo entregué</button>` : ''}
+        </div>`).join('') : '<div class="empty"><div class="big">😌</div><p>No hay pedidos en curso.</p></div>'}
+    </div>
+    <div class="sheet-foot"><button class="btn btn-light btn-lg btn-block" data-refresh>↻ Actualizar</button></div>`, () => clearTimeout(ordersTimer));
+  sheet.addEventListener('click', async (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if ('refresh' in t.dataset) openStaffOrders();
+    if (t.dataset.delivered) {
+      t.disabled = true;
+      try {
+        await api(`${API}/orders/${t.dataset.delivered}/entregado`, { method: 'POST' });
+        openStaffOrders();
+      } catch (ex) { t.disabled = false; toast(ex.message, 4000); }
+    }
+  });
+  ordersTimer = setTimeout(() => { if (document.body.contains(sheet)) openStaffOrders(); }, 20_000);
+}
+
+if (STAFF) {
+  $('#staff-orders').addEventListener('click', openStaffOrders);
+  $('#waiter-btn').addEventListener('click', askWaiterName);
+  $('#staff-logout').addEventListener('click', async () => {
+    if (!confirm('¿Cerrar sesión en este celular?')) return;
+    await api(`${API}/logout`, { method: 'POST' }).catch(() => {});
+    await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
+    staffLogin();
+  });
 }
 
 init();

@@ -47,10 +47,12 @@ const DEFAULTS = {
   api_key: '',
   session_secret: '',
   admin_password_hash: '',
+  // Contraseña de meseros (modo mesero en /mesero/). Vacía = solo entra el admin.
+  waiter_password_hash: '',
 };
 
 /** Ajustes que nunca salen del servidor. */
-export const PRIVATE_KEYS = new Set(['session_secret', 'admin_password_hash']);
+export const PRIVATE_KEYS = new Set(['session_secret', 'admin_password_hash', 'waiter_password_hash']);
 
 /** Ajustes visibles para cualquier cliente en la página de pedidos. */
 export const PUBLIC_KEYS = [

@@ -10,6 +10,12 @@ const r = Router();
 export { baseUrlOf };
 
 r.get('/menu', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await menuPayload());
+});
+
+/** Menú visible (productos activos, opciones y zonas). Lo usan la página de pedidos y el modo mesero. */
+export async function menuPayload() {
   const [s, cat] = await Promise.all([getSettings(), getCatalog()]);
   const settings = Object.fromEntries(PUBLIC_KEYS.map((k) => [k, s[k]]));
 
@@ -36,9 +42,8 @@ r.get('/menu', async (req, res) => {
     for (const p of products) if (!categories.find((c) => c.id === p.category_id)) p.category_id = 0;
   }
 
-  res.set('Cache-Control', 'no-store');
-  res.json({ settings, categories, products, groups, zones: activeZones(cat) });
-});
+  return { settings, categories, products, groups, zones: activeZones(cat) };
+}
 
 // Costo de envío según el punto que el cliente marca en el mapa
 r.post('/delivery-quote', rateLimit({ windowMs: 10 * 60_000, max: 60, message: 'Demasiadas consultas. Intenta en unos minutos.' }), async (req, res) => {

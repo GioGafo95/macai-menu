@@ -97,8 +97,8 @@ export function buildMacaiCatalog({ zones } = {}) {
   // product(chili, 'Chilibowl Chico', 'Base enchilada. Incluye 2 opciones entre toppings, chilitoppings, spreads y frutas.', 110, { sort: 1, groups: chiliGroups, included: 2 });
   // product(chili, 'Chilibowl Grande', 'Base enchilada. Incluye 3 opciones entre toppings, chilitoppings, spreads y frutas.', 150, { sort: 2, groups: chiliGroups, included: 3 });
 
-  product(waffles, 'Waffle', 'Waffle con 2 bolas de nieve del sabor que elijas. Incluye 2 opciones entre toppings, spreads y frutas.', 160,
-    { sort: 1, groups: [nieve, toppings, spreads, frutas], included: 2 });
+  product(waffles, 'Waffle', 'Waffle con 2 bolas de nieve del sabor que elijas. Incluye 3 opciones entre toppings, spreads y frutas.', 160,
+    { sort: 1, groups: [nieve, toppings, spreads, frutas], included: 3 });
 
   SMOOTHIES.forEach(([n, price, d], i) => product(smoothies, n, d, price, { sort: i + 1 }));
 

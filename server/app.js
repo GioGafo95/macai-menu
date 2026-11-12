@@ -5,6 +5,7 @@ import { store } from './data.js';
 import publicRoutes from './routes/public.js';
 import adminRoutes from './routes/admin.js';
 import apiV1 from './routes/apiV1.js';
+import meseroRoutes from './routes/mesero.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -67,6 +68,7 @@ export function createApp({ serveStatic = true } = {}) {
   app.use('/api/public', publicRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/v1', apiV1);
+  app.use('/api/mesero', meseroRoutes);
   app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
 
   if (serveStatic) {

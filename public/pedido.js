@@ -8,6 +8,7 @@ let timer;
 const FLOW = {
   delivery: [['nuevo', 'Pedido recibido'], ['preparando', 'Preparando'], ['listo', 'Listo'], ['en_camino', 'En camino'], ['entregado', 'Entregado']],
   pickup: [['nuevo', 'Pedido recibido'], ['preparando', 'Preparando'], ['listo', 'Listo para recoger'], ['entregado', 'Entregado']],
+  dine_in: [['nuevo', 'Pedido recibido'], ['preparando', 'Preparando'], ['listo', 'Listo'], ['entregado', 'Entregado']],
 };
 
 async function load() {

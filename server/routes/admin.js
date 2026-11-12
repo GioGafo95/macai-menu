@@ -4,7 +4,7 @@ import {
   store, getSettings, updateSettings, getCatalog, mutateCatalog, nextSeq, bySort,
   EDITABLE_KEYS, PRIVATE_KEYS, randomKey,
 } from '../data.js';
-import { requireAdmin, verifyPassword, setSessionCookie, clearSessionCookie, changePassword } from '../auth.js';
+import { requireAdmin, verifyPassword, setSessionCookie, clearSessionCookie, changePassword, setWaiterPassword } from '../auth.js';
 import { listOrders, updateOrder, getOrder, salesSummary, formatDriverText, STATUSES, ACTIVE_STATUSES } from '../orders.js';
 import { notifyOrderUpdated, sendTest } from '../notify.js';
 import { parseTiers } from '../distance.js';
@@ -325,6 +325,7 @@ r.get('/summary', async (req, res) => {
 /* ------------------------------- Ajustes ------------------------------- */
 
 const publicView = (s) => {
+  s.waiter_enabled = s.waiter_password_hash ? '1' : '0';
   for (const k of PRIVATE_KEYS) delete s[k];
   return s;
 };
@@ -368,6 +369,12 @@ r.post('/password', async (req, res) => {
   await changePassword(str(req.body?.current, 200), str(req.body?.next, 200));
   await setSessionCookie(req, res); // la sesión anterior queda invalidada; emitimos una nueva
   res.json({ ok: true });
+});
+
+// Contraseña del modo mesero (/mesero/). Vacía = desactivar el acceso de meseros.
+r.post('/waiter-password', async (req, res) => {
+  await setWaiterPassword(str(req.body?.password, 200));
+  res.json(publicView(await getSettings()));
 });
 
 r.post('/notify/test', async (req, res) => {
