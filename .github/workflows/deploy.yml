@@ -132,7 +132,8 @@ jobs:
         id: outputs
         run: |
           URL=$(node -p "require('./infra/outputs.json')['Macai-$STAGE'].Url")
-          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          CF=$(node -p "require('./infra/outputs.json')['Macai-$STAGE'].CloudFrontUrl")
+          echo "url=$CF" >> "$GITHUB_OUTPUT"
           echo "### 🚀 Macaí $STAGE desplegado" >> "$GITHUB_STEP_SUMMARY"
           echo "- Menú: $URL" >> "$GITHUB_STEP_SUMMARY"
           echo "- Panel: $URL/admin/" >> "$GITHUB_STEP_SUMMARY"

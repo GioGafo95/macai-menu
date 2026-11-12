@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import { CfnOutput, Duration, RemovalPolicy, Stack, StackProps, Tags } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -16,6 +17,9 @@ export interface MacaiStackProps extends StackProps {
   envName: 'qa' | 'prod';
   /** Contraseña inicial del panel (solo se usa la primera vez). */
   adminPassword?: string;
+  /** Dominio propio (ej. pedidos.macai.com.mx). Requiere certificateArn de ACM en us-east-1, ya validado. */
+  domainName?: string;
+  certificateArn?: string;
 }
 
 /**
@@ -146,8 +150,16 @@ function handler(event) {
     const siteOrigin = origins.S3BucketOrigin.withOriginAccessControl(siteBucket);
     const uploadsOrigin = origins.S3BucketOrigin.withOriginAccessControl(uploadsBucket);
 
+    const customDomain = props.domainName && props.certificateArn
+      ? {
+          domainNames: [props.domainName],
+          certificate: acm.Certificate.fromCertificateArn(this, 'Certificate', props.certificateArn),
+        }
+      : {};
+
     const distribution = new cloudfront.Distribution(this, 'Cdn', {
       comment: `Macai Bowls (${props.envName})`,
+      ...customDomain,
       defaultRootObject: 'index.html',
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // la opción más barata (NA + Europa; México incluido)
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
@@ -191,9 +203,18 @@ function handler(event) {
 
     /* ------------------------------ Salidas ------------------------------ */
 
-    new CfnOutput(this, 'Url', { value: `https://${distribution.distributionDomainName}`, description: 'Menú para clientes' });
-    new CfnOutput(this, 'AdminUrl', { value: `https://${distribution.distributionDomainName}/admin/`, description: 'Panel de administración' });
-    new CfnOutput(this, 'MeseroUrl', { value: `https://${distribution.distributionDomainName}/mesero/`, description: 'Modo mesero (tomar pedidos)' });
+    const siteUrl = `https://${props.domainName && props.certificateArn ? props.domainName : distribution.distributionDomainName}`;
+    new CfnOutput(this, 'Url', { value: siteUrl, description: 'Menú para clientes' });
+    // Siempre funciona, aunque el DNS del dominio propio aún no esté listo (lo usa la prueba de humo)
+    new CfnOutput(this, 'CloudFrontUrl', { value: `https://${distribution.distributionDomainName}` });
+    if (props.domainName && props.certificateArn) {
+      new CfnOutput(this, 'DnsCname', {
+        value: `${props.domainName} CNAME ${distribution.distributionDomainName}`,
+        description: 'Registro para tu DNS (GoDaddy): apunta el dominio a CloudFront',
+      });
+    }
+    new CfnOutput(this, 'AdminUrl', { value: `${siteUrl}/admin/`, description: 'Panel de administración' });
+    new CfnOutput(this, 'MeseroUrl', { value: `${siteUrl}/mesero/`, description: 'Modo mesero (tomar pedidos)' });
     new CfnOutput(this, 'TableName', { value: table.tableName });
     new CfnOutput(this, 'FunctionName', { value: api.functionName });
   }

@@ -130,7 +130,20 @@ GitHub → **Actions → Desplegar → Run workflow** → rama `main`, ambiente 
 
 ## Pendiente / siguientes pasos
 
-- **Dominio propio** (ej. `pedidos.macaibowls.com`): certificado gratis en ACM (us-east-1) + alias en CloudFront. Route 53 cuesta $0.50/mes por dominio; también funciona con tu proveedor de DNS actual.
+- **Dominio propio**: ya configurado con `pedidos.macai.com.mx` (ver abajo).
+
+## Dominio propio (`pedidos.macai.com.mx`)
+
+- El DNS está en **GoDaddy**. El certificado HTTPS (gratis) está en ACM `us-east-1` y se validó con un CNAME en GoDaddy; se renueva solo mientras ese CNAME exista.
+- En `infra/cdk.json`: `domain`, `domainCertificateArn` y `domainStage` (`qa` o `prod`). El dominio va en **un solo** ambiente a la vez.
+- Registros en GoDaddy (DNS → Agregar registro → CNAME):
+  - Validación del certificado: nombre `_ce88dcf255c8eec093f804df5f520801.pedidos` → `_5652bdcb169fa1f24869b814ac5fcdee.wzccmgtwzk.acm-validations.aws.` (no lo borres).
+  - Sitio: nombre `pedidos` → el dominio de CloudFront del ambiente (salida `CloudFrontUrl` sin `https://`).
+- **Pasar el dominio de QA a prod**:
+  1. Cambia `domainStage` a `prod` en `infra/cdk.json` y haz push (QA se despliega sin el dominio).
+  2. Despliega prod desde Actions.
+  3. En GoDaddy cambia el CNAME `pedidos` al CloudFront de prod.
+- La prueba de humo usa siempre la URL de CloudFront, así no depende del DNS.
 - **Fotos de productos**: se suben desde el panel; el navegador las reduce a máx. 1600 px antes de enviarlas.
 
 ## Borrar un ambiente

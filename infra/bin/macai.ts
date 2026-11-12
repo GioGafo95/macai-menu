@@ -5,6 +5,13 @@ import { GithubOidcStack } from '../lib/github-oidc-stack.js';
 
 const app = new App();
 
+// Dominio propio (DNS en GoDaddy). Va en UN solo ambiente a la vez (domainStage en cdk.json):
+// para pasarlo de QA a prod, primero se despliega QA sin él y luego prod con él.
+// El certificado se creó aparte en ACM (us-east-1) y se validó con un CNAME en GoDaddy.
+const domainFor = (stage: string) => (app.node.tryGetContext('domainStage') === stage
+  ? { domainName: app.node.tryGetContext('domain'), certificateArn: app.node.tryGetContext('domainCertificateArn') }
+  : {});
+
 const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
@@ -17,6 +24,7 @@ new MacaiStack(app, 'Macai-qa', {
   envName: 'qa',
   adminPassword: process.env.ADMIN_PASSWORD,
   description: 'Macai Bowls - ambiente QA',
+  ...domainFor('qa'),
 });
 
 new MacaiStack(app, 'Macai-prod', {
@@ -25,6 +33,7 @@ new MacaiStack(app, 'Macai-prod', {
   adminPassword: process.env.ADMIN_PASSWORD,
   description: 'Macai Bowls - produccion',
   terminationProtection: true,
+  ...domainFor('prod'),
 });
 
 // Una sola vez, desde tu PC: permite que GitHub Actions despliegue sin llaves de AWS guardadas (OIDC).
