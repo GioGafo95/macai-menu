@@ -6,7 +6,7 @@
   "context": {
     "githubRepo": "GioGafo95/macai-menu",
     "domain": "pedidos.macai.com.mx",
-    "domainStage": "qa",
+    "domainStage": "prod",
     "domainCertificateArn": "arn:aws:acm:us-east-1:473320740975:certificate/e557577c-7941-4a68-b70d-c723a672ce36",
     "githubSubjectPrefix": "repo:GioGafo95@42852664/macai-menu@1454054051",
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
