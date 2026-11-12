@@ -44,9 +44,8 @@ async function init() {
   $('#biz-tagline').textContent = S.tagline || '';
 
   const meta = [];
-  if (S.estimated_time) meta.push(`<span class="pill">⏱ ${esc(S.estimated_time)}</span>`);
-  if (S.delivery_enabled === '1') meta.push('<span class="pill">🛵 Envío a domicilio</span>');
-  if (S.pickup_enabled === '1') meta.push('<span class="pill">🏪 Recoger en tienda</span>');
+  if (S.delivery_enabled === '1') meta.push(`<span class="pill">🛵 A domicilio${S.estimated_time ? ` · ${esc(S.estimated_time)}` : ''}</span>`);
+  if (S.pickup_enabled === '1') meta.push(`<span class="pill">🏪 Recoger${pickupTime() ? ` · ${esc(pickupTime())}` : ''}</span>`);
   const last = store.get(LAST_ORDER_KEY);
   if (last?.token) meta.push(`<a class="pill accent" href="/pedido.html?t=${encodeURIComponent(last.token)}">📦 Mi último pedido</a>`);
   $('#hero-meta').innerHTML = meta.join('');
@@ -64,6 +63,7 @@ async function init() {
 /* ================================ Menú ================================ */
 
 const productById = (id) => menu.products.find((p) => p.id === id);
+const pickupTime = () => S.pickup_estimated_time || S.estimated_time || '';
 
 function productThumb(p, cls = 'thumb') {
   return p.image
@@ -441,6 +441,7 @@ function openCheckout() {
   }
   const canCash = STAFF || S.cash_enabled === '1';
   const canTransfer = STAFF || S.transfer_enabled === '1';
+  const canCard = STAFF || S.card_enabled === '1'; // tarjeta en sucursal: solo si no es a domicilio
 
   const whoHtml = `
       <div class="field">
@@ -456,7 +457,7 @@ function openCheckout() {
         <span class="label">${STAFF ? 'Tipo de pedido' : '¿Cómo lo quieres?'}</span>
         <div class="choice-row">
           ${STAFF ? '<button type="button" class="choice" data-ful="dine_in"><span class="ico">🍽️</span><strong>Comer aquí</strong><small>En el local</small></button>' : ''}
-          ${canPickup ? `<button type="button" class="choice" data-ful="pickup"><span class="ico">${STAFF ? '🥡' : '🏪'}</span><strong>${STAFF ? 'Para llevar' : 'Recoger'}</strong><small>${STAFF ? 'Se lo lleva' : 'Sin costo de envío'}</small></button>` : ''}
+          ${canPickup ? `<button type="button" class="choice" data-ful="pickup"><span class="ico">${STAFF ? '🥡' : '🏪'}</span><strong>${STAFF ? 'Para llevar' : 'Recoger'}</strong><small>${STAFF ? 'Se lo lleva' : pickupTime() ? `Listo en ${esc(pickupTime())}` : 'Sin costo de envío'}</small></button>` : ''}
           ${canDeliver ? `<button type="button" class="choice" data-ful="delivery"><span class="ico">🛵</span><strong>A domicilio</strong><small data-fee-label></small></button>` : ''}
         </div>
       </div>
@@ -464,7 +465,8 @@ function openCheckout() {
         <label for="c-table">Número de mesa</label>
         <input class="input" id="c-table" name="table" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Ej. 4" value="${esc(checkout.table)}">
       </div>` : ''}`;
-  if ((checkout.payment_method === 'cash' && !canCash) || (checkout.payment_method === 'transfer' && !canTransfer)) checkout.payment_method = '';
+  if ((checkout.payment_method === 'cash' && !canCash) || (checkout.payment_method === 'transfer' && !canTransfer)
+    || (checkout.payment_method === 'card' && !canCard)) checkout.payment_method = '';
   if (!checkout.payment_method && canCash !== canTransfer) checkout.payment_method = canCash ? 'cash' : 'transfer';
 
   const sheet = openSheet(`
@@ -509,14 +511,18 @@ function openCheckout() {
         </div>
       </div>
       <div data-pickup>
-        ${!STAFF && S.pickup_address ? `<div class="box">📍 Recoges en: ${esc(S.pickup_address)}</div>` : ''}
+        ${!STAFF && (S.pickup_address || pickupTime()) ? `<div class="box">${[
+          S.pickup_address ? `📍 Recoges en: ${esc(S.pickup_address)}` : '',
+          pickupTime() ? `⏱ Tu pedido estará listo en aprox. ${esc(pickupTime())}` : '',
+        ].filter(Boolean).join('\n')}</div>` : ''}
       </div>
 
       <div class="field">
         <span class="label">Método de pago</span>
         <div class="choice-row">
           ${canCash ? `<button type="button" class="choice" data-pay="cash"><span class="ico">💵</span><strong>Efectivo</strong><small>${STAFF ? 'En caja o al entregar' : 'Pagas al recibir'}</small></button>` : ''}
-          ${canTransfer ? `<button type="button" class="choice" data-pay="transfer"><span class="ico">🏦</span><strong>Transferencia</strong><small>${STAFF ? 'O pago con tarjeta' : 'Te damos los datos'}</small></button>` : ''}
+          ${canTransfer ? `<button type="button" class="choice" data-pay="transfer"><span class="ico">🏦</span><strong>Transferencia</strong><small>${STAFF ? 'A la cuenta del negocio' : 'Te damos los datos'}</small></button>` : ''}
+          ${canCard ? `<button type="button" class="choice" data-pay="card"><span class="ico">💳</span><strong>Tarjeta</strong><small>${STAFF ? 'Terminal en caja' : 'Pagas en sucursal'}</small></button>` : ''}
         </div>
       </div>
       ${STAFF ? `<label class="option paid-option"><input type="checkbox" name="paid" ${checkout.paid ? 'checked' : ''}>
@@ -556,7 +562,9 @@ function openCheckout() {
 
   function update() {
     $$('[data-ful]', sheet).forEach((b) => b.classList.toggle('active', b.dataset.ful === checkout.fulfillment));
+    if (checkout.payment_method === 'card' && checkout.fulfillment === 'delivery') checkout.payment_method = '';
     $$('[data-pay]', sheet).forEach((b) => b.classList.toggle('active', b.dataset.pay === checkout.payment_method));
+    $('[data-pay="card"]', sheet)?.classList.toggle('hidden', checkout.fulfillment === 'delivery');
     $('[data-delivery]', sheet).classList.toggle('hidden', checkout.fulfillment !== 'delivery');
     $('[data-pickup]', sheet).classList.toggle('hidden', checkout.fulfillment !== 'pickup');
     $('[data-dinein]', sheet)?.classList.toggle('hidden', checkout.fulfillment !== 'dine_in');

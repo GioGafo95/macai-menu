@@ -28,7 +28,7 @@ r.get('/orders', async (req, res) => {
   const statuses = q.status ? String(q.status).split(',') : undefined;
   if (statuses?.some((s) => !STATUSES.includes(s))) throw new HttpError(400, `status inválido. Valores: ${STATUSES.join(', ')}`);
   if (q.fulfillment && !['delivery', 'pickup', 'dine_in'].includes(q.fulfillment)) throw new HttpError(400, 'fulfillment debe ser delivery, pickup o dine_in');
-  if (q.payment_method && !['cash', 'transfer'].includes(q.payment_method)) throw new HttpError(400, 'payment_method debe ser cash o transfer');
+  if (q.payment_method && !['cash', 'transfer', 'card'].includes(q.payment_method)) throw new HttpError(400, 'payment_method debe ser cash, transfer o card');
   res.json(await listOrders({
     from: parseDate(q.from),
     to: parseDate(q.to, true),

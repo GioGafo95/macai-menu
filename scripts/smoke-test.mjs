@@ -89,7 +89,7 @@ const order = await call('/api/public/orders', {
   body: {
     items: [{ product_id: bowl.id, quantity: 1, toppings }],
     customer_name: 'Prueba automática', customer_phone: '5500000000',
-    fulfillment: 'pickup', payment_method: 'cash',
+    fulfillment: 'pickup', payment_method: menu.data.settings.card_enabled === '1' ? 'card' : 'cash',
   },
 });
 if (menu.data.settings.store_open !== '1') {

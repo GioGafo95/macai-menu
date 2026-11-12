@@ -12,7 +12,8 @@ const DEFAULTS = {
   whatsapp_number: '',
   currency: 'MXN',
   locale: 'es-MX',
-  estimated_time: '30 a 45 min',
+  estimated_time: '30 a 45 min',          // a domicilio
+  pickup_estimated_time: '10 a 15 min',   // para recoger en sucursal
   store_open: '1',
   closed_message: 'Por ahora estamos cerrados. ¡Vuelve pronto!',
   delivery_enabled: '1',
@@ -29,6 +30,7 @@ const DEFAULTS = {
   pickup_address: 'Calle General Ángel Flores 14, Centro, 81200 Los Mochis, Sin.',
   cash_enabled: '1',
   transfer_enabled: '1',
+  card_enabled: '1', // tarjeta en sucursal (solo pedidos para recoger)
   bank_info: 'Banco: \nTitular: \nCLABE: \nConcepto: tu número de pedido',
   notify_telegram_token: '',
   notify_telegram_chat_id: '',
@@ -56,9 +58,9 @@ export const PRIVATE_KEYS = new Set(['session_secret', 'admin_password_hash', 'w
 
 /** Ajustes visibles para cualquier cliente en la página de pedidos. */
 export const PUBLIC_KEYS = [
-  'business_name', 'tagline', 'whatsapp_number', 'currency', 'locale', 'estimated_time',
+  'business_name', 'tagline', 'whatsapp_number', 'currency', 'locale', 'estimated_time', 'pickup_estimated_time',
   'store_open', 'closed_message', 'delivery_enabled', 'delivery_flat_fee', 'free_delivery_over',
-  'delivery_mode', 'store_lat', 'store_lng', 'delivery_tiers', 'min_order', 'pickup_enabled', 'pickup_address', 'cash_enabled', 'transfer_enabled', 'bank_info',
+  'delivery_mode', 'store_lat', 'store_lng', 'delivery_tiers', 'min_order', 'pickup_enabled', 'pickup_address', 'cash_enabled', 'transfer_enabled', 'card_enabled', 'bank_info',
 ];
 
 export const EDITABLE_KEYS = Object.keys(DEFAULTS).filter(

@@ -13,7 +13,12 @@ export const STATUS_LABELS = {
   entregado: 'Entregado',
   cancelado: 'Cancelado',
 };
-export const PAYMENT_LABELS = { cash: 'Efectivo', transfer: 'Transferencia' };
+export const PAYMENT_LABELS = { cash: 'Efectivo', transfer: 'Transferencia', card: 'Tarjeta en sucursal' };
+export const PAYMENT_METHODS = Object.keys(PAYMENT_LABELS);
+
+/** Tiempo estimado según el tipo de pedido: recoger (y comer aquí) es más rápido que a domicilio. */
+export const estimatedTimeFor = (o, s) =>
+  (o.fulfillment === 'delivery' ? s.estimated_time : s.pickup_estimated_time || s.estimated_time) || '';
 export const FULFILLMENT_LABELS = { delivery: 'Envío a domicilio', pickup: 'Recoger en tienda', dine_in: 'Comer aquí' };
 export const FULFILLMENTS = Object.keys(FULFILLMENT_LABELS);
 
@@ -162,8 +167,12 @@ export function buildOrder(input, s, cat, { quote = null, staff = null } = {}) {
 
   const total = round2(subtotal + delivery_fee);
 
-  const payment_method = input.payment_method === 'transfer' ? 'transfer' : input.payment_method === 'cash' ? 'cash' : null;
+  const payment_method = PAYMENT_METHODS.includes(input.payment_method) ? input.payment_method : null;
   if (!payment_method) throw new HttpError(400, 'Elige un método de pago');
+  if (payment_method === 'card') {
+    if (fulfillment === 'delivery') throw new HttpError(400, 'El pago con tarjeta es solo para pedidos que recoges en sucursal');
+    if (!staff && s.card_enabled !== '1') throw new HttpError(400, 'El pago con tarjeta no está disponible');
+  }
   if (!staff && payment_method === 'cash' && s.cash_enabled !== '1') throw new HttpError(400, 'El pago en efectivo no está disponible');
   if (!staff && payment_method === 'transfer' && s.transfer_enabled !== '1') throw new HttpError(400, 'El pago por transferencia no está disponible');
 

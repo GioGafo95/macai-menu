@@ -12,6 +12,8 @@ const NEXT = {
   pickup: { nuevo: 'preparando', preparando: 'listo', listo: 'entregado' },
   dine_in: { nuevo: 'preparando', preparando: 'listo', listo: 'entregado' },
 };
+const PAY_ICON = { cash: '💵', transfer: '🏦', card: '💳' };
+const PAY_LABEL = { cash: 'Efectivo', transfer: 'Transferencia', card: 'Tarjeta en sucursal' };
 const NEXT_LABEL = { preparando: '👩‍🍳 Preparar', listo: '✅ Listo', en_camino: '🛵 Enviar', entregado: '📦 Entregado' };
 const POLL_MS = 10_000;
 
@@ -314,8 +316,8 @@ function orderCard(o, flash) {
       <div class="row muted small"><span></span><div>Subtotal ${money(o.subtotal)}${o.fulfillment === 'delivery' ? ` · Envío ${money(o.delivery_fee)}` : ''}</div></div>
       <div class="order-total"><span>Total</span><span>${money(o.total)}</span></div>
       <div class="row" style="align-items:center;margin-top:6px">
-        <span>${o.payment_method === 'cash' ? '💵' : '🏦'}</span>
-        <div style="flex:1">${o.payment_method === 'cash' ? 'Efectivo' : 'Transferencia'}
+        <span>${PAY_ICON[o.payment_method] || '💰'}</span>
+        <div style="flex:1">${PAY_LABEL[o.payment_method] || esc(o.payment_method)}
           ${o.cash_amount ? `<div class="muted small">Paga con ${money(o.cash_amount)} · <strong>cambio ${money(o.change_due)}</strong></div>` : ''}</div>
         <button class="paid-chip ${o.paid ? 'yes' : 'no'}" data-action="paid" title="Cambiar estado de pago">${o.paid ? '✓ Pagado' : 'Sin pagar'}</button>
       </div>
@@ -782,7 +784,8 @@ async function renderDelivery() {
         { name: 'delivery_flat_fee', label: 'Costo de envío fijo', type: 'number', step: '0.5', hint: 'Solo en modo "por zonas", si no tienes zonas activas.' },
         { name: 'free_delivery_over', label: 'Envío gratis a partir de', type: 'number', step: '1', hint: '0 = desactivado.' },
         { name: 'min_order', label: 'Pedido mínimo', type: 'number', step: '1', hint: '0 = sin mínimo.' },
-        { name: 'estimated_time', label: 'Tiempo estimado', placeholder: 'Ej. 30 a 45 min' },
+        { name: 'estimated_time', label: 'Tiempo estimado a domicilio', placeholder: 'Ej. 30 a 45 min' },
+        { name: 'pickup_estimated_time', label: 'Tiempo estimado para recoger', placeholder: 'Ej. 10 a 15 min' },
         { name: 'pickup_address', label: 'Dirección para recoger', type: 'textarea', rows: 2, placeholder: 'Calle, número, colonia, referencias' },
       ],
     },
@@ -896,6 +899,7 @@ async function renderSettings() {
       fields: [
         { name: 'cash_enabled', label: '💵 Efectivo', type: 'checkbox' },
         { name: 'transfer_enabled', label: '🏦 Transferencia', type: 'checkbox' },
+        { name: 'card_enabled', label: '💳 Tarjeta en sucursal (solo pedidos para recoger)', type: 'checkbox' },
         { name: 'bank_info', label: 'Datos para transferencia', type: 'textarea', rows: 4,
           hint: 'Se muestran al cliente cuando elige transferencia.' },
       ],

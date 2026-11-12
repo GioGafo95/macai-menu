@@ -30,7 +30,7 @@ Lista pedidos (más recientes primero).
 | `status`         | `entregado` o `nuevo,listo`| Uno o varios estados separados por coma |
 | `paid`           | `true` / `false`           | Filtra por pagado |
 | `fulfillment`    | `delivery` / `pickup` / `dine_in` | Tipo de entrega (`dine_in` = comer aquí, capturado en modo mesero) |
-| `payment_method` | `cash` / `transfer`        | Método de pago |
+| `payment_method` | `cash` / `transfer` / `card` | Método de pago (`card` = tarjeta en sucursal, solo pedidos para recoger o comer aquí) |
 | `limit`          | `100`                      | 1–500 (default 100) |
 | `offset`         | `0`                        | Paginación |
 | `sort`           | `asc` / `desc`             | Orden (default `desc`) |

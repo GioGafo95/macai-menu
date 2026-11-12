@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getSettings, getCatalog, bySort, PUBLIC_KEYS } from '../data.js';
-import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, formatDriverText, isAvailable, byDistance } from '../orders.js';
+import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, formatDriverText, isAvailable, byDistance, estimatedTimeFor } from '../orders.js';
 import { quoteDelivery, parsePoint } from '../distance.js';
 import { notifyNewOrder } from '../notify.js';
 import { HttpError, rateLimit, settle, baseUrlOf } from '../util.js';
@@ -93,7 +93,7 @@ r.get('/orders/:token', async (req, res) => {
   out.business_name = s.business_name;
   out.currency = s.currency;
   out.locale = s.locale;
-  out.estimated_time = s.estimated_time;
+  out.estimated_time = estimatedTimeFor(order, s);
   res.set('Cache-Control', 'no-store');
   res.json(out);
 });

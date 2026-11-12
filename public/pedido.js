@@ -89,7 +89,7 @@ function render(o) {
       </div>
       <div class="box" style="background:#f4f5f2">
 ${o.fulfillment === 'delivery' ? `🛵 Envío a: ${esc(o.address)}` : `🏪 Recoges en tienda${o.pickup_address ? `: ${esc(o.pickup_address)}` : ''}`}
-${o.payment_method === 'cash' ? `💵 Efectivo${o.cash_amount ? ` · pagas con ${money(o.cash_amount)} (cambio ${money(o.change_due)})` : ''}` : '🏦 Transferencia'}${o.notes ? `\n💬 ${esc(o.notes)}` : ''}</div>
+${o.payment_method === 'cash' ? `💵 Efectivo${o.cash_amount ? ` · pagas con ${money(o.cash_amount)} (cambio ${money(o.change_due)})` : ''}` : o.payment_method === 'card' ? '💳 Tarjeta (pagas en sucursal)' : '🏦 Transferencia'}${o.notes ? `\n💬 ${esc(o.notes)}` : ''}</div>
     </div>
 
     <div class="actions">
