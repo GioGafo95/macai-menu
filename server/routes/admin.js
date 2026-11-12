@@ -8,6 +8,7 @@ import { requireAdmin, verifyPassword, setSessionCookie, clearSessionCookie, cha
 import { listOrders, updateOrder, getOrder, salesSummary, formatDriverText, STATUSES, ACTIVE_STATUSES } from '../orders.js';
 import { notifyOrderUpdated, sendTest } from '../notify.js';
 import { parseTiers } from '../distance.js';
+import inventoryRoutes from './inventory.js';
 import { HttpError, reqStr, str, int, num, bool, parseDate, rateLimit, isSafeImageUrl, settle } from '../util.js';
 
 const r = Router();
@@ -34,6 +35,8 @@ r.post('/logout', (req, res) => {
 r.use(requireAdmin);
 
 r.get('/me', (req, res) => res.json({ ok: true }));
+
+r.use('/inventory', inventoryRoutes);
 
 /* ----------------------------- Categorías ----------------------------- */
 

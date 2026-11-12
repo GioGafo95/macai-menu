@@ -6,6 +6,7 @@ import { quoteDelivery, parsePoint } from '../distance.js';
 import { notifyNewOrder, notifyOrderUpdated } from '../notify.js';
 import { HttpError, rateLimit, settle, str, baseUrlOf } from '../util.js';
 import { menuPayload } from './public.js';
+import { catalogWithStock } from '../inventory.js';
 
 /**
  * Modo mesero (/mesero/): el personal toma pedidos desde su celular.
@@ -46,7 +47,8 @@ r.post('/delivery-quote', async (req, res) => {
 });
 
 r.post('/orders', async (req, res) => {
-  const [s, cat] = await Promise.all([getSettings(), getCatalog()]);
+  const [s, rawCat] = await Promise.all([getSettings(), getCatalog()]);
+  const cat = await catalogWithStock(rawCat, s);
   const body = req.body || {};
   let quote = null;
   if (body.fulfillment === 'delivery' && byDistance(s)) {

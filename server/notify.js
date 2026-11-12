@@ -141,3 +141,17 @@ export async function sendTest() {
   if (!tasks.length) return [{ ok: false, error: 'No hay ningún canal configurado todavía.' }];
   return runAll(tasks);
 }
+
+/** Aviso de inventario bajo (sin llamada telefónica: solo mensajes). */
+export async function notifyLowStock(items) {
+  const s = await getSettings();
+  if (s.inventory_alerts !== '1' || !items.length) return [];
+  const fmt = (n) => Number(n.toFixed(2)).toString();
+  const lines = items.map((i) => i.stock <= 0
+    ? `🔴 ${i.name}: AGOTADO`
+    : `🟠 ${i.name}: quedan ${fmt(i.stock)} ${i.unit} (mínimo ${fmt(i.min_stock)} ${i.unit})`);
+  const text = [`📦 Inventario por rellenar · ${s.business_name || ''}`.trim(), '', ...lines, '', 'Revisa el panel → Inventario.'].join('\n');
+  const results = await runAll(channelsFor({ ...s, notify_twilio_call: '0' }, text, ''));
+  for (const r of results) if (!r.ok) console.error(`[inventario] ${r.error}`);
+  return results;
+}

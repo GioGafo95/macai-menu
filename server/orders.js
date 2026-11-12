@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { store, bySort } from './data.js';
 import { ACTIVE_STATUSES } from './store/common.js';
 import { HttpError, round2, str, nowIso, money } from './util.js';
+import { applyOrderStock } from './inventory.js';
 
 export { ACTIVE_STATUSES };
 export const STATUSES = ['nuevo', 'preparando', 'listo', 'en_camino', 'entregado', 'cancelado'];
@@ -208,9 +209,27 @@ export async function createOrder(o) {
     status: 'nuevo',
     paid: false,
     ...o,
+    stock_applied: true,
   };
   await store.createOrder(order);
+  await syncStock(order, -1);
   return present(order);
+}
+
+/**
+ * Descuenta / regresa ingredientes del inventario. Un error aquí no debe tumbar el pedido:
+ * solo se registra en los logs. Si algo bajó del mínimo, avisa al celular.
+ */
+async function syncStock(order, sign) {
+  try {
+    const crossed = await applyOrderStock(order, sign);
+    if (crossed.length) {
+      const { notifyLowStock } = await import('./notify.js');
+      await notifyLowStock(crossed).catch((e) => console.error('[inventario] aviso:', e.message));
+    }
+  } catch (e) {
+    console.error(`[inventario] pedido #${order.id}:`, e.message);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -295,6 +314,15 @@ export async function updateOrder(id, { status, paid }) {
   if (status === undefined && paid === undefined) throw new HttpError(400, 'Nada que actualizar (usa "status" y/o "paid")');
   if (status !== undefined) {
     if (!STATUSES.includes(status)) throw new HttpError(400, `Estado inválido. Usa: ${STATUSES.join(', ')}`);
+    // Cancelar regresa los ingredientes al inventario; reactivar un cancelado los vuelve a descontar.
+    // (Pedidos anteriores al inventario no traen stock_applied y no se tocan.)
+    if (status === 'cancelado' && order.status !== 'cancelado' && order.stock_applied === true) {
+      await syncStock(order, +1);
+      order.stock_applied = false;
+    } else if (status !== 'cancelado' && order.status === 'cancelado' && order.stock_applied === false) {
+      await syncStock(order, -1);
+      order.stock_applied = true;
+    }
     order.status = status;
   }
   if (paid !== undefined) order.paid = !!paid;

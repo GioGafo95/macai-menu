@@ -49,6 +49,9 @@ const DEFAULTS = {
   api_key: '',
   session_secret: '',
   admin_password_hash: '',
+  // Inventario: aviso al celular cuando un ingrediente baja del mínimo / ocultar del menú lo agotado
+  inventory_alerts: '1',
+  inventory_auto_disable: '0',
   // Contraseña de meseros (modo mesero en /mesero/). Vacía = solo entra el admin.
   waiter_password_hash: '',
 };
@@ -70,7 +73,7 @@ export const EDITABLE_KEYS = Object.keys(DEFAULTS).filter(
 export const randomKey = (prefix = '') => prefix + crypto.randomBytes(24).toString('hex');
 
 /** Lee un documento, aplica cambios y guarda; reintenta si otra instancia escribió al mismo tiempo. */
-async function mutateDoc(key, initial, fn) {
+export async function mutateDoc(key, initial, fn) {
   for (let attempt = 0; attempt < 6; attempt++) {
     const cur = await store.getDoc(key);
     const data = structuredClone(cur?.data ?? initial());

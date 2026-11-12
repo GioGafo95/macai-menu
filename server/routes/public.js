@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getSettings, getCatalog, bySort, PUBLIC_KEYS } from '../data.js';
 import { buildOrder, createOrder, getOrderByToken, publicOrder, activeZones, formatOrderText, formatDriverText, isAvailable, byDistance, estimatedTimeFor } from '../orders.js';
 import { quoteDelivery, parsePoint } from '../distance.js';
+import { catalogWithStock } from '../inventory.js';
 import { notifyNewOrder } from '../notify.js';
 import { HttpError, rateLimit, settle, baseUrlOf } from '../util.js';
 
@@ -16,7 +17,8 @@ r.get('/menu', async (req, res) => {
 
 /** Menú visible (productos activos, opciones y zonas). Lo usan la página de pedidos y el modo mesero. */
 export async function menuPayload() {
-  const [s, cat] = await Promise.all([getSettings(), getCatalog()]);
+  const [s, rawCat] = await Promise.all([getSettings(), getCatalog()]);
+  const cat = await catalogWithStock(rawCat, s); // lo agotado en inventario no se muestra (si está activado)
   const settings = Object.fromEntries(PUBLIC_KEYS.map((k) => [k, s[k]]));
 
   const categories = cat.categories.filter((c) => c.active).sort(bySort).map(({ id, name }) => ({ id, name }));
@@ -29,7 +31,12 @@ export async function menuPayload() {
     };
   }
 
-  const products = cat.products.filter((p) => isAvailable(p, cat)).sort(bySort).map((p) => ({
+  // Un producto con un grupo obligatorio sin opciones disponibles (todo agotado) no se puede pedir
+  const missingRequired = (p) => (p.group_ids || []).some((gid) => {
+    const g = cat.groups.find((x) => x.id === gid);
+    return g && g.min_select > 0 && groups[gid].options.length < g.min_select;
+  });
+  const products = cat.products.filter((p) => isAvailable(p, cat) && !missingRequired(p)).sort(bySort).map((p) => ({
     id: p.id, category_id: p.category_id, name: p.name, description: p.description, price: p.price,
     image: p.image, featured: !!p.featured, allow_notes: !!p.allow_notes,
     included_count: p.included_count || 0, included_value: p.included_value || 0,
@@ -54,7 +61,8 @@ r.post('/delivery-quote', rateLimit({ windowMs: 10 * 60_000, max: 60, message: '
 });
 
 r.post('/orders', rateLimit({ windowMs: 10 * 60_000, max: 15, message: 'Has enviado muchos pedidos seguidos. Intenta en unos minutos o escríbenos por WhatsApp.' }), async (req, res) => {
-  const [s, cat] = await Promise.all([getSettings(), getCatalog()]);
+  const [s, rawCat] = await Promise.all([getSettings(), getCatalog()]);
+  const cat = await catalogWithStock(rawCat, s);
   const body = req.body || {};
   let quote = null;
   if (body.fulfillment !== 'pickup' && byDistance(s) && s.delivery_enabled === '1') {
