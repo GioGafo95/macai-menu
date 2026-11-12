@@ -1066,6 +1066,23 @@ async function renderSettings() {
 const INV_STATUS = { ok: 'OK', bajo: 'Por acabarse', agotado: 'Agotado' };
 const MOV_LABEL = { compra: '📥 Compra', venta: '🧾 Venta', merma: '🗑️ Merma', conteo: '🔢 Conteo', devolucion: '↩️ Cancelación', ajuste: '✏️ Ajuste' };
 let invSearch = '';
+let invView = store.get('adm_inv_view', 'stock');
+let costDays = 30;
+
+const invHead = () => `
+    <div class="view-head"><h2>Inventario</h2>
+      <div class="filters">
+        <button class="chip${invView === 'stock' ? ' active' : ''}" data-inv-view="stock">📦 Existencias</button>
+        <button class="chip${invView === 'costs' ? ' active' : ''}" data-inv-view="costs">💰 Costos y ganancia</button>
+      </div>
+    </div>`;
+function bindInvHead() {
+  $$('[data-inv-view]', view).forEach((b) => b.addEventListener('click', () => {
+    invView = b.dataset.invView;
+    store.set('adm_inv_view', invView);
+    renderInventory();
+  }));
+}
 
 const fmtNum = (n) => {
   const v = Number(n) || 0;
@@ -1087,6 +1104,7 @@ function updateInvBadge(n) {
 const refreshInvBadge = () => A('/inventory').then((d) => updateInvBadge(d.summary.low + d.summary.out)).catch(() => {});
 
 async function renderInventory() {
+  if (invView === 'costs') return renderCosts();
   const data = await A('/inventory');
   const items = data.items;
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -1133,7 +1151,8 @@ async function renderInventory() {
   };
 
   view.innerHTML = `
-    <div class="view-head"><h2>Inventario</h2><button class="btn" data-new-item>+ Ingrediente</button></div>
+    ${invHead()}
+    <div class="inv-toolbar"><button class="btn" data-new-item>+ Ingrediente</button></div>
     <div class="stats">
       <div class="stat ${refill.length ? 'warn' : ''}"><small>Por rellenar</small><strong>${refill.length}</strong></div>
       <div class="stat ${s.out ? 'bad' : ''}"><small>Agotados</small><strong>${s.out}</strong></div>
@@ -1274,6 +1293,7 @@ async function renderInventory() {
     return L.join('\n');
   };
 
+  bindInvHead();
   $$('[data-new-item]', view).forEach((b) => b.addEventListener('click', () => editItem(null)));
   $$('[data-edit-item]', view).forEach((b) => b.addEventListener('click', () => editItem(byId.get(Number(b.dataset.editItem)))));
   $$('[data-mov]', view).forEach((b) => b.addEventListener('click', () => movement(b.dataset.mov, byId.get(Number(b.dataset.item)))));
@@ -1304,17 +1324,128 @@ async function renderInventory() {
   }));
 }
 
+/* --------------------------- Costos y ganancia --------------------------- */
+
+const marginClass = (m) => (m === null ? '' : m >= 65 ? 'm-good' : m >= 50 ? 'm-ok' : 'm-low');
+const marginChip = (m) => (m === null ? '<span class="muted small">—</span>' : `<span class="m-chip ${marginClass(m)}">${m}%</span>`);
+
+async function renderCosts() {
+  const data = await A(`/inventory/costs?days=${costDays}`);
+  const sales = data.sales;
+  const withData = data.products.filter((p) => p.has_any);
+  const best = [...withData].sort((a, b) => (b.margin ?? -1) - (a.margin ?? -1));
+
+  const lineList = (lines) => lines.map((l) => `<div class="cost-line"><span>${esc(l.name)} <span class="muted">${fmtQty(convertQty(l.qty, l.unit, l.display_unit), l.display_unit)}</span></span><span>${money(l.cost)}</span></div>`).join('');
+  const productCard = (p) => `
+    <details class="cost-card ${p.active ? '' : 'inactive'}">
+      <summary>
+        <div class="cost-head">
+          <div class="grow"><div class="name">${esc(p.name)}${p.active ? '' : ' <span class="muted small">(oculto)</span>'}</div>
+            <div class="sub">${p.has_any ? `${p.cost.min !== p.cost.max ? `Entre ${money(p.cost.min)} y ${money(p.cost.max)} según lo que elijan` : 'Costo fijo'}` : 'Sin recetas todavía'}</div></div>
+          <div class="cost-nums">
+            <span><small>Precio</small>${money(p.price)}</span>
+            <span><small>Costo</small>${p.has_any ? money(p.cost.typical) : '—'}</span>
+            <span><small>Ganancia</small><strong>${p.has_any ? money(p.profit) : '—'}</strong></span>
+            ${p.has_any ? marginChip(p.margin) : '<span></span>'}
+          </div>
+        </div>
+        ${p.warnings.length ? `<div class="cost-warn">⚠️ ${p.warnings.map(esc).join(' · ')}</div>` : ''}
+      </summary>
+      <div class="cost-body">
+        <div class="cost-sec"><div class="cost-sec-head"><strong>Producto</strong> <span class="muted small">vaso, tapa, cuchara, base fija…</span>
+          <button class="btn btn-ghost btn-sm" data-cost-recipe="p${p.id}" data-name="${esc(p.name)}">🧾 Receta</button></div>
+          ${p.own.lines.length ? lineList(p.own.lines) : '<p class="muted small">Sin receta propia.</p>'}
+          <div class="cost-line total"><span>Subtotal</span><span>${money(p.own.cost)}</span></div>
+        </div>
+        ${p.groups.filter((g) => g.required).map((g) => `
+        <div class="cost-sec"><div class="cost-sec-head"><strong>${esc(g.name)}</strong> <span class="muted small">elige ${g.min_select} · promedio ${money(g.avg)}</span></div>
+          ${g.options.map((o) => `<div class="cost-line">
+            <span>${esc(o.name)} ${o.has_recipe ? `<span class="muted small">${o.specific ? '· receta de este producto' : '· receta general'}</span>` : '<span class="m-chip m-low">sin receta</span>'}</span>
+            <span>${o.has_recipe ? money(o.cost) : ''} <button class="btn btn-ghost btn-sm" data-cost-recipe="p${p.id}t${o.id}" data-fallback="t${o.id}" data-name="${esc(`${o.name} en ${p.name}`)}">🧾</button></span>
+          </div>`).join('')}
+          <p class="hint">Usa 🧾 para poner el gramaje de cada sabor <strong>en este producto</strong> (ej. la base del bowl chico usa menos que la del grande).</p>
+        </div>`).join('')}
+        ${p.included_count ? `
+        <div class="cost-sec"><div class="cost-sec-head"><strong>${p.included_count} opciones incluidas</strong> <span class="muted small">toppings, spreads y frutas</span></div>
+          <div class="cost-line"><span>Promedio (${p.included_count} × ${money(p.included_cost / p.included_count)})</span><span>${money(p.included_cost)}</span></div>
+          <p class="hint">Lo que se cobra de más por extras va aparte (ver "Extras").</p>
+        </div>` : ''}
+        <div class="cost-sec cost-sum">
+          <div class="cost-line"><span>Precio de venta</span><span>${money(p.price)}</span></div>
+          <div class="cost-line"><span>Costo típico</span><span>− ${money(p.cost.typical)}</span></div>
+          <div class="cost-line total"><span>Ganancia por pieza</span><span>${money(p.profit)} ${marginChip(p.margin)}</span></div>
+          ${p.cost.max !== p.cost.typical ? `<div class="cost-line muted small"><span>Si eligen lo más caro</span><span>${money(p.profit_worst)} (${p.margin_worst}%)</span></div>` : ''}
+        </div>
+      </div>
+    </details>`;
+
+  view.innerHTML = `
+    ${invHead()}
+    <div class="filters cost-range">${[[7, '7 días'], [30, '30 días'], [90, '90 días']].map(([d, l]) =>
+      `<button class="chip${costDays === d ? ' active' : ''}" data-cost-days="${d}">${l}</button>`).join('')}</div>
+    <div class="stats">
+      <div class="stat"><small>Vendido (${sales.days} días)</small><strong>${money(sales.revenue)}</strong></div>
+      <div class="stat"><small>Costo de ingredientes</small><strong>${money(sales.cost)}</strong></div>
+      <div class="stat"><small>Ganancia bruta</small><strong>${money(sales.profit)}</strong></div>
+      <div class="stat"><small>Margen</small><strong>${sales.margin === null ? '—' : `${sales.margin}%`}</strong></div>
+    </div>
+    ${!withData.length ? `<div class="panel inv-onboard"><h3>💰 Para ver tu ganancia</h3><ol>
+      <li>En <strong>📦 Existencias</strong>, ponle a cada ingrediente su <strong>costo</strong> (Editar → Costo por unidad, o registra una <strong>+ Entrada</strong> con el costo total y se calcula solo).</li>
+      <li>Captura las <strong>recetas</strong> (gramaje) de cada producto y opción.</li>
+      <li>Aquí verás cuánto te cuesta hacer cada producto contra su precio y cuánto le ganas.</li></ol></div>` : ''}
+    ${sales.uncosted_units ? `<p class="hint">⚠️ ${sales.uncosted_units} de ${sales.units} piezas vendidas no tienen receta: su costo cuenta como $0 y la ganancia real es menor.</p>` : ''}
+
+    <div class="panel inv-panel">
+      <div class="panel-head"><div><h3>🥗 Costo y ganancia por producto</h3>
+        <span class="muted small">Con el costo actual de tus ingredientes. Toca un producto para ver el desglose.</span></div>
+        <span class="muted small">${marginChip(70)} bien · ${marginChip(55)} regular · ${marginChip(40)} bajo</span></div>
+      ${data.products.map(productCard).join('')}
+    </div>
+
+    ${best.length > 1 ? `<div class="panel inv-panel"><h3>🏆 De más a menos ganancia (%)</h3>
+      ${best.map((p) => `<div class="cost-rank"><span class="grow">${esc(p.name)}</span>
+        <span class="cost-bar"><span class="${marginClass(p.margin)}" style="width:${Math.max(0, Math.min(100, p.margin ?? 0))}%"></span></span>
+        <span class="cost-rank-n">${money(p.profit)} · ${p.margin ?? '—'}%</span></div>`).join('')}</div>` : ''}
+
+    ${data.extras.length ? `<div class="panel inv-panel"><h3>➕ Extras</h3>
+      <p class="muted small" style="margin-top:0">Cuando el cliente pide una opción además de las incluidas: lo que cobras contra lo que te cuesta la porción.</p>
+      <div class="cost-table">
+        <div class="cost-tr th"><span>Opción</span><span>Cobras</span><span>Cuesta</span><span>Ganas</span></div>
+        ${data.extras.map((e) => `<div class="cost-tr"><span>${esc(e.name)} <span class="muted small">${esc(e.group)}</span></span>
+          <span>${money(e.price)}</span><span>${e.has_recipe ? money(e.cost) : '<span class="muted">sin receta</span>'}</span>
+          <span>${e.has_recipe ? `${money(e.profit)} ${marginChip(e.margin)}` : ''}</span></div>`).join('')}
+      </div></div>` : ''}
+
+    <div class="panel inv-panel"><h3>📈 Lo que ya vendiste · últimos ${sales.days} días</h3>
+      <p class="muted small" style="margin-top:0">${sales.orders} pedidos · ${sales.units} piezas. Calculado con los costos de hoy (incluye lo que cobraste por extras; no incluye envío).</p>
+      ${sales.products.length ? `<div class="cost-table sales">
+        <div class="cost-tr th"><span>Producto</span><span>Piezas</span><span>Vendido</span><span>Costo</span><span>Ganancia</span></div>
+        ${sales.products.map((x) => `<div class="cost-tr"><span>${esc(x.name)}</span><span>${x.units}</span><span>${money(x.revenue)}</span><span>${money(x.cost)}</span>
+          <span><strong>${money(x.profit)}</strong> ${marginChip(x.margin)}</span></div>`).join('')}
+      </div>` : '<p class="muted small">Aún no hay ventas en este periodo.</p>'}
+    </div>`;
+
+  bindInvHead();
+  $$('[data-cost-days]', view).forEach((b) => b.addEventListener('click', () => { costDays = Number(b.dataset.costDays); renderCosts(); }));
+  $$('[data-cost-recipe]', view).forEach((b) => b.addEventListener('click', (e) => {
+    e.preventDefault();
+    openRecipe(b.dataset.costRecipe, b.dataset.name, renderCosts, b.dataset.fallback);
+  }));
+}
+
 /** Abre la receta de un producto (p12) u opción (t34) desde cualquier pestaña. */
-async function openRecipe(key, name, onSaved) {
+async function openRecipe(key, name, onSaved, fallback) {
   try {
     const data = await A('/inventory');
-    editRecipe(key, name, data, data.items, onSaved);
+    editRecipe(key, name, data, data.items, onSaved, fallback);
   } catch (e) { toast(e.message, 4000); }
 }
 
-function editRecipe(key, name, data, items, onSaved) {
+function editRecipe(key, name, data, items, onSaved, fallback) {
   const byIdR = new Map(items.map((i) => [i.id, i]));
-  let lines = (data.recipes[key] || []).map((l) => {
+  const own = data.recipes[key] || [];
+  const usingFallback = !own.length && fallback && data.recipes[fallback]?.length;
+  let lines = (usingFallback ? data.recipes[fallback] : own).map((l) => {
     const it = byIdR.get(l.item_id);
     return it ? { item_id: l.item_id, unit: l.unit || it.unit, qty: Number(lineQty(l, it).toFixed(4)) } : { ...l };
   });
@@ -1331,7 +1462,8 @@ function editRecipe(key, name, data, items, onSaved) {
   const sheet = openSheet(`
     <div class="sheet-title"><h2>Receta: ${esc(name)}</h2><button class="icon-btn" data-close aria-label="Cerrar">×</button></div>
     <div class="sheet-body">
-      <p class="muted small" style="margin-top:0">Lo que se descuenta del inventario cada vez que se vende 1 ${key[0] === 'p' ? 'producto' : 'vez esta opción'}.</p>
+      <p class="muted small" style="margin-top:0">Lo que se descuenta del inventario cada vez que se vende 1 ${/^p\d+$/.test(key) ? 'producto' : 'vez esta opción'}.</p>
+      ${fallback ? `<p class="hint" style="margin-top:0">Receta solo para este producto. ${usingFallback ? 'Abajo está la receta general como punto de partida: ajústala y guarda.' : ''} Si la dejas vacía se usa la receta general de la opción.</p>` : ''}
       <div data-lines></div>
       <button class="btn btn-ghost btn-sm" data-add-line ${options.length ? '' : 'disabled'}>+ Agregar ingrediente</button>
       ${options.length ? '' : '<p class="muted small">Primero crea ingredientes en la pestaña 📦 Inventario.</p>'}

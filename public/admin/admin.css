@@ -201,3 +201,51 @@ details.help ol { padding-left: 20px; margin: 8px 0; }
 .recipe-line .icon-btn { width: 36px; height: 36px; font-size: 1.1rem; box-shadow: none; background: #f4f4f4; }
 
 select.recipe-unit { padding: 10px 6px; }
+
+/* Costos y ganancia */
+.inv-toolbar { display: flex; justify-content: flex-end; margin: -6px 0 10px; }
+.cost-range { margin-bottom: 12px; }
+.m-chip { display: inline-block; font-size: .74rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #eee; color: #555; white-space: nowrap; }
+.m-chip.m-good { background: #e3f6ec; color: #137a45; }
+.m-chip.m-ok { background: #fff3d6; color: #8a5a00; }
+.m-chip.m-low { background: #fde4e1; color: #b42318; }
+.cost-card { border-bottom: 1px solid var(--line); }
+.cost-card:last-child { border-bottom: 0; }
+.cost-card.inactive .name { opacity: .5; }
+.cost-card summary { list-style: none; cursor: pointer; padding: 10px 0; }
+.cost-card summary::-webkit-details-marker { display: none; }
+.cost-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cost-head .grow { flex: 1; min-width: 160px; }
+.cost-head .name { font-weight: 700; }
+.cost-head .sub { color: var(--muted); font-size: .82rem; }
+.cost-nums { display: grid; grid-template-columns: repeat(3, minmax(64px, auto)) 56px; gap: 12px; align-items: center; text-align: right; font-size: .92rem; }
+.cost-nums small { display: block; color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
+.cost-warn { font-size: .78rem; color: #8a5a00; margin-top: 4px; }
+.cost-body { background: #f2fbfc; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.cost-sec { padding: 6px 0 8px; border-bottom: 1px dashed var(--line); }
+.cost-sec:last-child { border-bottom: 0; }
+.cost-sec-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.cost-sec-head .btn { margin-left: auto; }
+.cost-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: .88rem; padding: 2px 0; }
+.cost-line.total { font-weight: 800; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
+.cost-sum .cost-line.total { font-size: 1rem; }
+.cost-rank { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: .88rem; }
+.cost-rank .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cost-bar { width: 32%; height: 10px; background: #f1f1f1; border-radius: 999px; overflow: hidden; flex-shrink: 0; }
+.cost-bar span { display: block; height: 100%; border-radius: 999px; }
+.cost-bar .m-good { background: #2ebd6b; }
+.cost-bar .m-ok { background: #f5b544; }
+.cost-bar .m-low { background: #e5533d; }
+.cost-rank-n { width: 110px; text-align: right; font-weight: 700; flex-shrink: 0; }
+.cost-table { font-size: .86rem; }
+.cost-tr { display: grid; grid-template-columns: 1fr 70px 80px 120px; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.cost-table.sales .cost-tr { grid-template-columns: 1fr 56px 84px 84px 130px; }
+.cost-tr > span:not(:first-child) { text-align: right; }
+.cost-tr.th { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+@media (max-width: 640px) {
+  .cost-nums { grid-template-columns: repeat(3, 1fr) 50px; width: 100%; font-size: .85rem; }
+  .cost-tr, .cost-table.sales .cost-tr { grid-template-columns: 1fr 58px 64px 96px; font-size: .8rem; }
+  .cost-table.sales .cost-tr > span:nth-child(2) { display: none; }
+  .cost-bar { width: 26%; }
+  .cost-rank-n { width: 92px; font-size: .8rem; }
+}

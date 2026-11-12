@@ -7,6 +7,7 @@ import { HttpError, round2, nowIso } from './util.js';
  *   items:     [{ id, name, unit, stock, min_stock, par, cost, supplier, active }]
  *              min_stock = "avísame cuando baje de aquí" · par = cantidad ideal al rellenar · cost = precio por unidad
  *   recipes:   { 'p12': [{ item_id, qty }], 't34': [...] }  → cuánto usa 1 producto (p) o 1 opción/topping (t)
+ *              'p12t34' = la opción 34 dentro del producto 12 (ej. la base en bowl chico vs grande); si existe, reemplaza a 't34'
  *   usage:     { 'YYYY-MM-DD': { item_id: cantidad vendida } }  (últimos 35 días, para calcular para cuántos días alcanza)
  *   movements: últimos movimientos (compra, venta, merma, conteo, devolución) para el historial
  *
@@ -47,6 +48,14 @@ export function mutateInventory(fn) {
 const n2 = (n) => Math.round(n * 10000) / 10000;
 const today = () => nowIso().slice(0, 10);
 export const recipeKey = (kind, id) => `${kind === 'product' ? 'p' : 't'}${id}`;
+export const RECIPE_KEY = /^(p\d+t\d+|p\d+|t\d+)$/;
+
+/** Receta de una opción dentro de un producto: la específica (p12t34) o la general (t34). */
+export function recipeFor(inv, productId, toppingId) {
+  const specific = `p${productId}t${toppingId}`;
+  if (inv.recipes[specific]?.length) return { key: specific, lines: inv.recipes[specific] };
+  return { key: `t${toppingId}`, lines: inv.recipes[`t${toppingId}`] || [] };
+}
 
 function addMovement(inv, m) {
   inv.seq.movement = (inv.seq.movement || 0) + 1;
@@ -61,12 +70,12 @@ const isLow = (i) => i.min_stock > 0 && i.stock <= i.min_stock;
 /** Ingredientes que consume un pedido: Map(item_id → cantidad). */
 export function orderNeeds(order, inv) {
   const need = new Map();
-  const add = (key, times) => {
-    for (const line of inv.recipes[key] || []) need.set(line.item_id, (need.get(line.item_id) || 0) + line.qty * times);
+  const add = (lines, times) => {
+    for (const line of lines || []) need.set(line.item_id, (need.get(line.item_id) || 0) + line.qty * times);
   };
   for (const it of order.items || []) {
-    add(`p${it.product_id}`, it.quantity);
-    for (const t of it.toppings || []) add(`t${t.id}`, it.quantity);
+    add(inv.recipes[`p${it.product_id}`], it.quantity);
+    for (const t of it.toppings || []) add(recipeFor(inv, it.product_id, t.id).lines, it.quantity);
   }
   return need;
 }
@@ -110,6 +119,7 @@ export function outOfStock(inv) {
   const out = { products: new Set(), toppings: new Set() };
   const stock = new Map(inv.items.filter((i) => i.active !== false).map((i) => [i.id, i.stock]));
   for (const [key, lines] of Object.entries(inv.recipes)) {
+    if (!/^[pt]\d+$/.test(key)) continue; // las recetas por producto (p12t34) no ocultan la opción en los demás
     if (lines.some((l) => stock.has(l.item_id) && stock.get(l.item_id) < l.qty)) {
       (key[0] === 'p' ? out.products : out.toppings).add(Number(key.slice(1)));
     }
@@ -138,6 +148,12 @@ export function inventoryView(inv, cat) {
   const names = new Map();
   for (const p of cat.products) names.set(`p${p.id}`, p.name);
   for (const g of cat.groups) for (const t of g.toppings) names.set(`t${t.id}`, `${t.name} (${g.name})`);
+  for (const p of cat.products) {
+    for (const gid of p.group_ids || []) {
+      const g = cat.groups.find((x) => x.id === gid);
+      for (const t of g?.toppings || []) names.set(`p${p.id}t${t.id}`, `${t.name} en ${p.name}`);
+    }
+  }
   for (const [key, lines] of Object.entries(inv.recipes)) {
     for (const l of lines) {
       if (!names.has(key)) continue;

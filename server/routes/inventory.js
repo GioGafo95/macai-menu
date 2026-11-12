@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { getCatalog } from '../data.js';
 import {
-  getInventory, mutateInventory, inventoryView, cleanItem, seedFromCatalog, MOVEMENT_TYPES, convert, compatibleUnits,
+  getInventory, mutateInventory, inventoryView, cleanItem, seedFromCatalog, MOVEMENT_TYPES, convert, compatibleUnits, RECIPE_KEY,
 } from '../inventory.js';
+import { productCosts, salesProfit } from '../costing.js';
+import { listOrders } from '../orders.js';
 import { notifyLowStock } from '../notify.js';
 import { HttpError, str, settle } from '../util.js';
 
@@ -109,14 +111,18 @@ r.post('/items/:id/movements', async (req, res) => {
 
 /* -------------------------------- Recetas -------------------------------- */
 
-// key: p<id de producto> o t<id de opción/topping>
+// key: p<id de producto>, t<id de opción/topping> o p<producto>t<opción> (la opción solo en ese producto)
 r.put('/recipes/:key', async (req, res) => {
   const key = String(req.params.key);
-  if (!/^[pt]\d+$/.test(key)) throw new HttpError(400, 'Receta inválida');
+  if (!RECIPE_KEY.test(key)) throw new HttpError(400, 'Receta inválida');
   const cat = await getCatalog();
-  const id = Number(key.slice(1));
-  const exists = key[0] === 'p' ? cat.products.some((p) => p.id === id) : cat.groups.some((g) => g.toppings.some((t) => t.id === id));
-  if (!exists) throw new HttpError(404, key[0] === 'p' ? 'Producto no encontrado' : 'Opción no encontrada');
+  const [, pid, tid] = key.match(/^(?:p(\d+))?(?:t(\d+))?$/).map(Number);
+  const product = pid ? cat.products.find((p) => p.id === pid) : null;
+  if (pid && !product) throw new HttpError(404, 'Producto no encontrado');
+  if (tid) {
+    const groups = cat.groups.filter((g) => !product || (product.group_ids || []).includes(g.id));
+    if (!groups.some((g) => g.toppings.some((t) => t.id === tid))) throw new HttpError(404, 'Opción no encontrada');
+  }
   const raw = Array.isArray(req.body?.lines) ? req.body.lines : [];
   if (raw.length > 30) throw new HttpError(400, 'Demasiados ingredientes');
 
@@ -140,6 +146,20 @@ r.put('/recipes/:key', async (req, res) => {
     else delete inv.recipes[key];
   });
   res.json(await view());
+});
+
+/** Costo de producción y ganancia por producto, y ganancia real de los últimos días. */
+r.get('/costs', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+  const from = new Date(Date.now() - days * 86400000).toISOString();
+  const [inv, cat, orders] = await Promise.all([getInventory(), getCatalog(), listOrders({ from, limit: 500 })]);
+  // listOrders pagina a 500; para la ganancia se necesitan todos los del rango
+  let all = orders.data;
+  for (let offset = 500; offset < orders.pagination.total; offset += 500) {
+    all = all.concat((await listOrders({ from, limit: 500, offset })).data);
+  }
+  res.json({ ...productCosts(inv, cat), sales: { days, ...salesProfit(all, inv) } });
 });
 
 /** Crea ingredientes y recetas desde los toppings, spreads y frutas del menú. */
