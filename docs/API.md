@@ -4,7 +4,7 @@ Base: `https://TU-DOMINIO/api/v1` (en local: `http://localhost:3000/api/v1`)
 
 ## Autenticación
 
-Copia la **API key** desde el panel: **Ajustes → API e integraciones**. Envíala en cada petición:
+Copia la **API key** desde el panel: **Ajustes → 🔌 Integraciones**. Envíala en cada petición:
 
 ```
 X-API-Key: mk_xxxxxxxx
@@ -146,7 +146,7 @@ Resumen del periodo (excluye cancelados):
 
 ## Webhook (tiempo real)
 
-En **Ajustes → API e integraciones** pon la URL de tu sistema. Por cada evento enviamos un `POST` JSON:
+En **Ajustes → 🔌 Integraciones** pon la URL de tu sistema. Por cada evento enviamos un `POST` JSON:
 
 ```json
 { "event": "order.created", "sent_at": "2026-11-11T14:12:51.000Z", "data": { ...pedido... } }

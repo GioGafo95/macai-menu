@@ -102,14 +102,54 @@ $('#store-open').addEventListener('change', async (e) => {
 
 /* ================================ Pestañas ================================ */
 
-const TABS = { orders: renderOrders, menu: renderMenu, toppings: renderToppings, inventory: renderInventory, delivery: renderDelivery, settings: renderSettings };
+/**
+ * 4 pestañas principales; Menú, Inventario y Ajustes se dividen en secciones (barra de abajo del encabezado).
+ * La sección elegida se recuerda. Las direcciones viejas (#toppings, #delivery) siguen funcionando.
+ */
+const SECTIONS = {
+  menu: [['products', '🥗 Productos'], ['toppings', '🧩 Toppings y opciones']],
+  inventory: [['stock', '📦 Existencias'], ['purchases', '🧾 Compras'], ['costs', '💰 Costos y ganancia']],
+  settings: [['general', '🏪 Negocio y pagos'], ['delivery', '🛵 Envío y entrega'], ['notify', '🔔 Avisos'], ['staff', '🧑‍🍳 Meseros y acceso'], ['api', '🔌 Integraciones']],
+};
+const ALIASES = { toppings: ['menu', 'toppings'], delivery: ['settings', 'delivery'] };
+const sectionOf = (t) => {
+  const list = SECTIONS[t];
+  if (!list) return null;
+  const v = store.get(`adm_sec_${t}`, list[0][0]);
+  return list.some(([k]) => k === v) ? v : list[0][0];
+};
+const setSection = (t, s) => store.set(`adm_sec_${t}`, s);
+const renderSettingsSection = () => (sectionOf('settings') === 'delivery' ? renderDelivery() : renderSettings());
+const TABS = {
+  orders: renderOrders,
+  menu: () => (sectionOf('menu') === 'toppings' ? renderToppings() : renderMenu()),
+  inventory: () => renderInventory(),
+  settings: renderSettingsSection,
+};
 
-function setTab(name) {
+function drawSubnav() {
+  const nav = $('#subnav');
+  const list = SECTIONS[tab];
+  nav.classList.toggle('hidden', !list);
+  if (!list) { nav.innerHTML = ''; return; }
+  const cur = sectionOf(tab);
+  nav.innerHTML = `<div class="subnav-in">${list.map(([k, l]) => `<button class="chip${k === cur ? ' active' : ''}" data-sec="${k}">${l}</button>`).join('')}</div>`;
+  $('.chip.active', nav)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function setTab(name, section) {
+  if (ALIASES[name]) [name, section] = ALIASES[name];
+  const [base, sub] = String(name).split('/');
+  name = base;
+  section ||= sub;
   if (!TABS[name]) name = 'orders';
+  if (section && SECTIONS[name]?.some(([k]) => k === section)) setSection(name, section);
   tab = name;
-  history.replaceState(null, '', `#${name}`);
+  const sec = sectionOf(name);
+  history.replaceState(null, '', `#${name}${sec ? `/${sec}` : ''}`);
   $$('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   if (name === 'orders') clearNewAlert();
+  drawSubnav();
   view.innerHTML = '<div class="spinner"></div>';
   window.scrollTo(0, 0);
   TABS[name]().catch((e) => {
@@ -120,10 +160,15 @@ $('#tabs').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
   if (b) setTab(b.dataset.tab);
 });
+$('#subnav').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sec]');
+  if (b) setTab(tab, b.dataset.sec);
+});
 view.addEventListener('click', (e) => { if (e.target.closest('[data-retry]')) setTab(tab); });
 window.addEventListener('hashchange', () => {
   const name = location.hash.replace('#', '');
-  if (name !== tab && !$('#app').classList.contains('hidden')) setTab(name);
+  const cur = `${tab}${sectionOf(tab) ? `/${sectionOf(tab)}` : ''}`;
+  if (name !== cur && !$('#app').classList.contains('hidden')) setTab(name);
 });
 
 /* ============================ Alertas de pedidos ============================ */
@@ -605,7 +650,7 @@ async function renderMenu() {
     { name: 'category_id', label: 'Categoría', type: 'select', options: [{ value: '', label: '— Sin categoría —' }, ...cats.map((c) => ({ value: c.id, label: c.name }))] },
     { name: 'image', label: 'Foto', type: 'image' },
     { name: 'topping_group_ids', label: 'Toppings / opciones', type: 'checks', options: groupOptions,
-      hint: 'Elige qué grupos de opciones puede personalizar el cliente. Los grupos se crean en la pestaña Toppings.' },
+      hint: 'Elige qué grupos de opciones puede personalizar el cliente. Los grupos se crean en Menú → 🧩 Toppings y opciones.' },
     { name: 'included_count', label: 'Opciones incluidas en el precio', type: 'number', step: '1',
       hint: 'Ej. 2 = "incluye 2 toppings, spreads o frutas". 0 = todas se cobran.' },
     { name: 'included_value', label: 'Valor cubierto por cada opción incluida', type: 'number', step: '0.5',
@@ -647,7 +692,7 @@ async function renderMenu() {
     .filter((c) => c.items.length);
 
   view.innerHTML = `
-    <div class="view-head"><h2>Menú</h2><button class="btn" data-new-product>+ Nuevo producto</button></div>
+    <div class="view-head"><h2>Productos</h2><button class="btn" data-new-product>+ Nuevo producto</button></div>
     <div class="panel">
       <div class="panel-head"><h3>Productos</h3><span class="muted small">${products.length} en total</span></div>
       ${sections.length ? sections.map((s) => `
@@ -733,7 +778,7 @@ async function renderToppings() {
   view.innerHTML = `
     <div class="view-head"><h2>Toppings y opciones</h2><button class="btn" data-new-group>+ Nuevo grupo</button></div>
     <p class="muted" style="margin-top:-4px">Un <strong>grupo</strong> reúne opciones que el cliente puede elegir (ej. "Proteína: elige 1" o "Extras: hasta 4").
-      Después asígnalo a tus productos desde la pestaña <strong>Menú</strong>.</p>
+      Después asígnalo a tus productos en <strong>Menú → 🥗 Productos</strong>.</p>
     ${groups.map((g) => `
       <div class="panel">
         <div class="panel-head">
@@ -833,7 +878,7 @@ async function renderDelivery() {
   });
 
   view.innerHTML = `
-    <div class="view-head"><h2>Envío</h2></div>
+    <div class="view-head"><h2>Envío y entrega</h2></div>
     ${settingsPanel(defs[0])}
     ${settingsPanel(defs[1])}
     <div class="panel">
@@ -1006,6 +1051,16 @@ async function renderSettings() {
 
   wireSettings(defs);
 
+  // Muestra solo la sección elegida en la barra de Ajustes
+  const sec = sectionOf('settings');
+  const SEC_OF = { business: 'general', payments: 'general', notify: 'notify', integrations: 'api', 'pw-form': 'staff', 'waiter-form': 'staff' };
+  const SEC_TITLE = { general: 'Negocio y pagos', notify: 'Avisos al celular', staff: 'Meseros y acceso', api: 'Integraciones' };
+  $('.view-head h2', view).textContent = SEC_TITLE[sec] || 'Ajustes';
+  [...view.children].forEach((el) => {
+    if (el.classList.contains('view-head')) return;
+    el.hidden = (SEC_OF[el.dataset.settings || el.id] || 'general') !== sec;
+  });
+
   $('[data-copy-link]', view).addEventListener('click', () => copy(`${shopUrl}/`, 'Link copiado'));
   $('[data-share-link]', view)?.addEventListener('click', () => navigator.share({ title: settings.business_name, text: `Haz tu pedido en ${settings.business_name}`, url: `${shopUrl}/` }).catch(() => {}));
   $('[data-copy-key]', view).addEventListener('click', () => copy(settings.api_key, 'API key copiada'));
@@ -1066,24 +1121,10 @@ async function renderSettings() {
 const INV_STATUS = { ok: 'OK', bajo: 'Por acabarse', agotado: 'Agotado' };
 const MOV_LABEL = { compra: '📥 Compra', venta: '🧾 Venta', merma: '🗑️ Merma', conteo: '🔢 Conteo', devolucion: '↩️ Cancelación', ajuste: '✏️ Ajuste' };
 let invSearch = '';
-let invView = store.get('adm_inv_view', 'stock');
 let costDays = 30;
-
-const invHead = () => `
-    <div class="view-head"><h2>Inventario</h2>
-      <div class="filters">
-        <button class="chip${invView === 'stock' ? ' active' : ''}" data-inv-view="stock">📦 Existencias</button>
-        <button class="chip${invView === 'purchases' ? ' active' : ''}" data-inv-view="purchases">🧾 Compras</button>
-        <button class="chip${invView === 'costs' ? ' active' : ''}" data-inv-view="costs">💰 Costos y ganancia</button>
-      </div>
-    </div>`;
-function bindInvHead() {
-  $$('[data-inv-view]', view).forEach((b) => b.addEventListener('click', () => {
-    invView = b.dataset.invView;
-    store.set('adm_inv_view', invView);
-    renderInventory();
-  }));
-}
+const INV_TITLES = { stock: 'Existencias', purchases: 'Compras', costs: 'Costos y ganancia' };
+const invHead = () => `<div class="view-head"><h2>${INV_TITLES[sectionOf('inventory')]}</h2></div>`;
+const bindInvHead = () => {};
 
 const fmtNum = (n) => {
   const v = Number(n) || 0;
@@ -1105,8 +1146,8 @@ function updateInvBadge(n) {
 const refreshInvBadge = () => A('/inventory').then((d) => updateInvBadge(d.summary.low + d.summary.out)).catch(() => {});
 
 async function renderInventory() {
-  if (invView === 'costs') return renderCosts();
-  if (invView === 'purchases') return renderPurchases();
+  if (sectionOf('inventory') === 'costs') return renderCosts();
+  if (sectionOf('inventory') === 'purchases') return renderPurchases();
   const data = await A('/inventory');
   const items = data.items;
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -1153,8 +1194,7 @@ async function renderInventory() {
   };
 
   view.innerHTML = `
-    ${invHead()}
-    <div class="inv-toolbar"><button class="btn" data-new-item>+ Ingrediente</button></div>
+    <div class="view-head"><h2>Existencias</h2><button class="btn" data-new-item>+ Ingrediente</button></div>
     <div class="stats">
       <div class="stat ${refill.length ? 'warn' : ''}"><small>Por rellenar</small><strong>${refill.length}</strong></div>
       <div class="stat ${s.out ? 'bad' : ''}"><small>Agotados</small><strong>${s.out}</strong></div>
@@ -1215,7 +1255,7 @@ async function renderInventory() {
     <div class="panel inv-panel">
       <h3>⚙️ Opciones</h3>
       <label class="check-field"><input type="checkbox" data-inv-setting="inventory_alerts" ${settings.inventory_alerts === '1' ? 'checked' : ''}>
-        <span>🔔 Avisarme al celular cuando un ingrediente baje de su mínimo <span class="muted small">(usa los canales de Ajustes → Notificaciones)</span></span></label>
+        <span>🔔 Avisarme al celular cuando un ingrediente baje de su mínimo <span class="muted small">(usa los canales de Ajustes → 🔔 Avisos)</span></span></label>
       <label class="check-field"><input type="checkbox" data-inv-setting="inventory_auto_disable" ${settings.inventory_auto_disable === '1' ? 'checked' : ''}>
         <span>🚫 Ocultar del menú lo que no alcance a prepararse <span class="muted small">(cuando un ingrediente se acaba, sus productos y toppings aparecen como agotados para clientes y meseros)</span></span></label>
       <p class="hint">Activa "ocultar" solo cuando ya hayas capturado tus existencias reales con <strong>Conteo</strong>; si no, lo que tenga existencia 0 dejaría de mostrarse.</p>
@@ -1445,8 +1485,7 @@ async function renderPurchases() {
   if (!chartItems.some(([id]) => id === purItem)) purItem = chartItems[0]?.[0] ?? null;
 
   view.innerHTML = `
-    ${invHead()}
-    <div class="inv-toolbar"><button class="btn" data-new-purchase>+ Registrar compra</button></div>
+    <div class="view-head"><h2>Compras</h2><button class="btn" data-new-purchase>+ Registrar compra</button></div>
     <div class="filters cost-range"><select class="input pur-month" data-pur-month>
       ${months.map((m) => `<option value="${m}" ${m === purMonth ? 'selected' : ''}>${monthLabel(m, true)}</option>`).join('')}
     </select></div>
@@ -1720,7 +1759,7 @@ function editRecipe(key, name, data, items, onSaved, fallback) {
       ${fallback ? `<p class="hint" style="margin-top:0">Receta solo para este producto. ${usingFallback ? 'Abajo está la receta general como punto de partida: ajústala y guarda.' : ''} Si la dejas vacía se usa la receta general de la opción.</p>` : ''}
       <div data-lines></div>
       <button class="btn btn-ghost btn-sm" data-add-line ${options.length ? '' : 'disabled'}>+ Agregar ingrediente</button>
-      ${options.length ? '' : '<p class="muted small">Primero crea ingredientes en la pestaña 📦 Inventario.</p>'}
+      ${options.length ? '' : '<p class="muted small">Primero crea ingredientes en Inventario → 📦 Existencias.</p>'}
       <div class="error-msg hidden" data-error role="alert"></div>
     </div>
     <div class="sheet-foot"><button class="btn btn-lg btn-block" data-save>Guardar receta</button></div>`);
