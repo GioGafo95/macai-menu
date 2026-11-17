@@ -1,4 +1,4 @@
-import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor } from '/common.js';
+import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor, toppingsText } from '/common.js';
 import { createMap, searchAddress } from '/map.js';
 
 /* ================================ Constantes ================================ */
@@ -355,7 +355,7 @@ function orderCard(o, flash) {
       <div class="order-items">
         ${o.items.map((i) => `
           <div class="it"><strong>${i.quantity}×</strong> ${esc(i.name)} <span class="muted" style="float:right">${money(i.line_total)}</span></div>
-          ${i.toppings.length ? `<div class="extra">+ ${i.toppings.map((t) => esc(t.name) + (t.price > 0 ? ` (+${money(t.price)})` : "")).join(', ')}</div>` : ''}
+          ${i.toppings.length ? `<div class="extra">+ ${toppingsText(i.toppings)}</div>` : ''}
           ${i.note ? `<div class="note">📝 ${esc(i.note)}</div>` : ''}`).join('')}
       </div>
       ${o.notes ? `<div class="row"><span>💬</span><div style="color:#b35c00;font-weight:600">${esc(o.notes)}</div></div>` : ''}

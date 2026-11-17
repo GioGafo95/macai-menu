@@ -352,3 +352,11 @@ textarea.input { resize: vertical; min-height: 70px; }
 .status-pill.s-preparando { background: #fff3c4; color: #8a6200; }
 .status-pill.s-listo { background: #d8f7e6; color: #137a45; }
 .status-pill.s-en_camino { background: var(--cyan-soft); color: var(--cyan-ink); }
+
+/* Doble topping: selector de cantidad dentro de la opción */
+.option span.opt-qty { flex: 0 0 auto; display: inline-flex; align-items: center; background: #fff; border: 1.5px solid var(--cyan); border-radius: 999px; overflow: hidden; }
+.option span.opt-qty[hidden] { display: none; }
+.opt-qty button { width: 30px; height: 28px; border: 0; background: transparent; color: var(--navy); font-size: 1.05rem; font-weight: 800; cursor: pointer; }
+.opt-qty button:disabled { opacity: .3; cursor: not-allowed; }
+.opt-qty b { min-width: 18px; text-align: center; font-size: .9rem; }
+.opts-grid .option span.opt-qty { margin-left: 26px; }

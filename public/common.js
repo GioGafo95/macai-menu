@@ -54,3 +54,13 @@ export const store = {
 
 export const PLACEHOLDER_EMOJI = ['🥣', '🍓', '🥭', '🫐', '🍌', '🥥', '🥝', '🍍'];
 export const emojiFor = (id) => PLACEHOLDER_EMOJI[(Number(id) || 0) % PLACEHOLDER_EMOJI.length];
+
+/** Agrupa opciones repetidas de un pedido: "Granola ×2 (+$10)". */
+export function toppingsText(list = [], moneyFn = money) {
+  const out = [];
+  for (const t of list) {
+    const same = out.find((x) => x.id === t.id && x.name === t.name);
+    if (same) { same.n++; same.price += t.price || 0; } else out.push({ id: t.id, name: t.name, n: 1, price: t.price || 0 });
+  }
+  return out.map((t) => `${esc(t.name)}${t.n > 1 ? ` ×${t.n}` : ''}${t.price > 0 ? ` (+${moneyFn(t.price)})` : ''}`).join(', ');
+}

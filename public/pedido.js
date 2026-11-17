@@ -1,4 +1,4 @@
-import { $, esc, money, setCurrency, api, toast } from './common.js';
+import { $, esc, money, setCurrency, api, toast, toppingsText } from './common.js';
 
 const params = new URLSearchParams(location.search);
 const token = params.get('t');
@@ -77,7 +77,7 @@ function render(o) {
         <div class="line-item">
           <div>
             <div><strong>${i.quantity}×</strong> ${esc(i.name)}</div>
-            ${i.toppings.length ? `<div class="extra">${i.toppings.map((t) => esc(t.name) + (t.price > 0 ? ` (+${money(t.price)})` : "")).join(', ')}</div>` : ''}
+            ${i.toppings.length ? `<div class="extra">${toppingsText(i.toppings)}</div>` : ''}
             ${i.note ? `<div class="extra">📝 ${esc(i.note)}</div>` : ''}
           </div>
           <div>${money(i.line_total)}</div>

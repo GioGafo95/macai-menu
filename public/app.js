@@ -1,4 +1,4 @@
-import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor } from './common.js';
+import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor, toppingsText } from './common.js';
 import { createMap, searchAddress, reverseAddress, currentPosition } from './map.js';
 
 // Modo mesero (/mesero/): la misma página, pero el personal captura el pedido del cliente.
@@ -154,12 +154,19 @@ function groupRule(g) {
   return 'Opcional';
 }
 
+/** Veces que se puede pedir la misma opción (ej. doble granola). Igual que MAX_REPEAT en server/orders.js. */
+const MAX_REPEAT = 3;
+/** Solo se repiten opciones de grupos de varias (toppings, frutas…), no los de "elige 1". */
+const repeatable = (g) => g.max_select !== 1;
+
 function openProduct(p, editKey) {
   if (!p) return;
   const editing = editKey ? cart.find((i) => i.key === editKey) : null;
   let qty = editing?.quantity || 1;
   const groups = p.groups.map((id) => menu.groups[id]).filter(Boolean);
-  const selected = new Set(editing?.toppings || []);
+  // Veces que se eligió cada opción (las de grupos de varias opciones se pueden repetir: doble granola)
+  const counts = new Map();
+  for (const id of editing?.toppings || []) counts.set(id, (counts.get(id) || 0) + 1);
   const closed = !STAFF && S.store_open !== '1';
 
   const sheet = openSheet(`
@@ -181,9 +188,12 @@ function openProduct(p, editKey) {
           <div class="${compact ? 'opts-grid' : ''}">
           ${g.options.map((o) => `
             <label class="option">
-              <input type="${type}" name="g${g.id}" value="${o.id}" ${selected.has(o.id) ? 'checked' : ''}>
+              <input type="${type}" name="g${g.id}" value="${o.id}" ${counts.has(o.id) ? 'checked' : ''}>
               <span class="opt-name">${esc(o.name)}${o.description ? `<small>${esc(o.description)}</small>` : ''}</span>
               <span class="opt-price" data-price="${o.id}">${o.price > 0 ? '+' + money(o.price) : ''}</span>
+              ${repeatable(g) ? `<span class="opt-qty" data-oqty="${o.id}" hidden>
+                <button type="button" data-ominus="${o.id}" aria-label="Quitar uno de ${esc(o.name)}">−</button><b data-oq="${o.id}">1</b><button type="button" data-oplus="${o.id}" aria-label="Uno más de ${esc(o.name)}">+</button>
+              </span>` : ''}
             </label>`).join('')}
           </div>
         </div>`;
@@ -200,25 +210,39 @@ function openProduct(p, editKey) {
     </div>`);
 
   const addBtn = $('[data-add]', sheet);
+  const timesOf = (i) => (i.checked ? counts.get(Number(i.value)) || 1 : 0);
+  const groupCount = (g) => $$(`[data-group="${g.id}"] input`, sheet).reduce((a, i) => a + timesOf(i), 0);
+  const selectedIds = () => $$('input:checked', sheet).flatMap((i) => Array(timesOf(i)).fill(Number(i.value)));
 
   function update() {
     let ok = true;
-    const pricing = priceFor(p, $$('input:checked', sheet).map((i) => i.value));
+    const pricing = priceFor(p, selectedIds());
     for (const g of groups) {
       const box = $(`[data-group="${g.id}"]`, sheet);
       const inputs = $$('input', box);
-      const count = inputs.filter((i) => i.checked).length;
+      const count = groupCount(g);
+      const full = g.max_select > 0 && count >= g.max_select;
       inputs.forEach((i) => {
-        const full = g.max_select > 0 && count >= g.max_select && i.type === 'checkbox' && g.max_select !== 1;
-        i.disabled = !i.checked && full;
+        i.disabled = !i.checked && full && i.type === 'checkbox' && g.max_select !== 1;
         i.closest('.option').classList.toggle('disabled', i.disabled);
+        // Selector de cantidad (doble topping)
+        const q = $(`[data-oqty="${i.value}"]`, box);
+        if (q) {
+          const n = timesOf(i);
+          q.hidden = !i.checked;
+          $(`[data-oq="${i.value}"]`, q).textContent = n;
+          $('[data-oplus]', q).disabled = full || n >= MAX_REPEAT;
+          i.closest('.option').classList.toggle('has-qty', i.checked);
+        }
         // Etiqueta de precio: "Incluido" si entra en el paquete
         const o = g.options.find((x) => x.id === Number(i.value));
         const label = $(`[data-price="${o.id}"]`, box);
         if (!(o.price > 0)) return;
-        const sel = pricing.opts.find((x) => x.id === o.id);
+        const mine = pricing.opts.filter((x) => x.id === o.id);
+        const sel = mine.length ? { included: mine.some((x) => x.included), charged: mine.reduce((a, x) => a + x.charged, 0) } : null;
         let text = `+${money(o.price)}`;
         let inc = false;
+        if (sel && !sel.included) text = `+${money(sel.charged)}`;
         if (sel?.included) { inc = true; text = sel.charged > 0 ? `Incluido +${money(sel.charged)}` : 'Incluido'; }
         else if (!sel && pricing.left > 0) { inc = true; text = o.price > p.included_value ? `Incluido +${money(o.price - p.included_value)}` : 'Incluido'; }
         label.textContent = text;
@@ -244,8 +268,24 @@ function openProduct(p, editKey) {
     addBtn.dataset.ok = ok ? '1' : '';
   }
 
+  sheet.addEventListener('click', (e) => {
+    const plus = e.target.closest('[data-oplus]');
+    const minus = e.target.closest('[data-ominus]');
+    if (!plus && !minus) return;
+    e.preventDefault();
+    const id = Number((plus || minus).dataset.oplus || (plus || minus).dataset.ominus);
+    const n = counts.get(id) || 1;
+    if (plus) counts.set(id, Math.min(MAX_REPEAT, n + 1));
+    else if (n > 1) counts.set(id, n - 1);
+    else { counts.delete(id); $(`input[value="${id}"]`, (plus || minus).closest('.group')).checked = false; }
+    update();
+  });
   sheet.addEventListener('change', (e) => {
     const i = e.target;
+    if (i.type === 'checkbox') {
+      if (i.checked) counts.set(Number(i.value), 1);
+      else counts.delete(Number(i.value));
+    }
     if (i.type === 'checkbox' && i.checked) {
       // Grupos de máximo 1 con checkbox: se comportan como selección única pero se pueden desmarcar
       const g = groups.find((x) => `g${x.id}` === i.name);
@@ -258,14 +298,14 @@ function openProduct(p, editKey) {
 
   addBtn.addEventListener('click', () => {
     if (!addBtn.dataset.ok) {
-      const missing = groups.find((g) => $$(`[data-group="${g.id}"] input:checked`, sheet).length < g.min_select);
+      const missing = groups.find((g) => groupCount(g) < g.min_select);
       if (missing) {
         toast(`Elige una opción en "${missing.name}"`);
         $(`[data-group="${missing.id}"]`, sheet).scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       return;
     }
-    const toppings = $$('input:checked', sheet).map((i) => Number(i.value));
+    const toppings = selectedIds();
     const note = $('#p-note', sheet)?.value.trim() || '';
     const sig = `${p.id}|${[...toppings].sort((a, b) => a - b).join(',')}|${note}`;
     if (editing) {
@@ -302,9 +342,14 @@ function mergeDuplicates() {
  * "incluye N opciones de hasta $X": se descuenta hasta X a las N opciones con costo más caras.
  */
 function priceFor(p, selectedIds) {
-  const ids = new Set(selectedIds.map(Number));
+  const times = new Map();
+  for (const id of selectedIds.map(Number)) times.set(id, (times.get(id) || 0) + 1);
   const opts = [];
-  for (const gid of p.groups) for (const o of menu.groups[gid]?.options || []) if (ids.has(o.id)) opts.push({ ...o, charged: o.price, included: false });
+  for (const gid of p.groups) {
+    for (const o of menu.groups[gid]?.options || []) {
+      for (let k = 0; k < (times.get(o.id) || 0); k++) opts.push({ ...o, charged: o.price, included: false });
+    }
+  }
   const count = p.included_count || 0;
   const value = p.included_value || 0;
   let used = 0;
@@ -382,7 +427,7 @@ function openCart() {
         <div class="cart-item">
           <div class="cart-item-body">
             <h4>${esc(p.name)}</h4>
-            ${opts.length ? `<div class="extra">${opts.map((o) => esc(o.name)).join(', ')}</div>` : ''}
+            ${opts.length ? `<div class="extra">${toppingsText(opts.map((o) => ({ ...o, price: 0 })))}</div>` : ''}
             ${i.note ? `<div class="extra">📝 ${esc(i.note)}</div>` : ''}
             <div style="display:flex;gap:14px;margin-top:6px">
               ${p.groups.length || p.allow_notes ? `<button class="link-btn" style="color:var(--cyan-ink)" data-edit="${esc(i.key)}">Editar</button>` : ''}

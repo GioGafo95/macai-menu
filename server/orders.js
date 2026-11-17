@@ -52,6 +52,20 @@ export const byDistance = (s) => s.delivery_mode === 'distance';
  * Modifica cada topping: price = lo que se cobra, list_price = precio normal, included = true si entró en el paquete.
  * La misma regla está en public/app.js (solo para mostrar el precio; el servidor manda).
  */
+/** Veces que se puede pedir la misma opción (ej. doble granola). Igual en public/app.js. */
+export const MAX_REPEAT = 3;
+
+/** Agrupa opciones repetidas para mostrarlas: [{ name, n, price }] (price = suma de lo cobrado). */
+export function groupToppings(list = []) {
+  const out = [];
+  for (const t of list) {
+    const same = out.find((x) => x.id === t.id && x.name === t.name);
+    if (same) { same.n++; same.price = round2(same.price + (t.price || 0)); } else out.push({ id: t.id, name: t.name, n: 1, price: t.price || 0 });
+  }
+  return out;
+}
+export const toppingText = (t, m) => `${t.name}${t.n > 1 ? ` ×${t.n}` : ''}${t.price > 0 ? ` (+${m(t.price)})` : ''}`;
+
 export function applyIncluded(toppings, count, value) {
   for (const t of toppings) { t.list_price = t.price; t.included = false; }
   if (!(count > 0 && value > 0)) return toppings;
@@ -93,20 +107,30 @@ export function buildOrder(input, s, cat, { quote = null, staff = null } = {}) {
     const quantity = Math.floor(Number(it.quantity));
     if (!(quantity >= 1 && quantity <= 50)) throw new HttpError(400, `Cantidad inválida para "${p.name}"`);
 
-    const selected = new Set((Array.isArray(it.toppings) ? it.toppings : []).map(Number));
+    // Las opciones pueden venir repetidas (doble topping): se cuentan
+    const rawTops = (Array.isArray(it.toppings) ? it.toppings : []).slice(0, 60).map(Number);
+    const selected = new Map();
+    for (const id of rawTops) selected.set(id, (selected.get(id) || 0) + 1);
     const toppings = [];
     for (const gid of p.group_ids || []) {
       const g = cat.groups.find((x) => x.id === gid);
       if (!g) continue;
       const picked = g.toppings.filter((o) => o.active).sort(bySort).filter((o) => selected.has(o.id));
+      const counted = new Map(picked.map((o) => [o.id, selected.get(o.id)]));
+      const times = (o) => counted.get(o.id);
+      for (const o of picked) {
+        if (times(o) > 1 && g.max_select === 1) throw new HttpError(400, `"${p.name}": en "${g.name}" solo se elige una`);
+        if (times(o) > MAX_REPEAT) throw new HttpError(400, `"${p.name}": máximo ${MAX_REPEAT} veces "${o.name}"`);
+      }
+      const total = picked.reduce((a, o) => a + times(o), 0);
       picked.forEach((o) => selected.delete(o.id));
-      if (picked.length < g.min_select) {
+      if (total < g.min_select) {
         throw new HttpError(400, `"${p.name}": elige al menos ${g.min_select} en "${g.name}"`);
       }
-      if (g.max_select > 0 && picked.length > g.max_select) {
+      if (g.max_select > 0 && total > g.max_select) {
         throw new HttpError(400, `"${p.name}": máximo ${g.max_select} en "${g.name}"`);
       }
-      for (const o of picked) toppings.push({ id: o.id, name: o.name, price: o.price, group: g.name });
+      for (const o of picked) for (let k = 0; k < times(o); k++) toppings.push({ id: o.id, name: o.name, price: o.price, group: g.name });
     }
     if (selected.size) throw new HttpError(400, `Algunas opciones de "${p.name}" ya no están disponibles. Revisa tu carrito.`);
 
@@ -466,7 +490,7 @@ export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}
   L.push('');
   for (const it of o.items) {
     L.push(`${it.quantity}x ${it.name} — ${m(it.line_total)}`);
-    if (it.toppings.length) L.push(`   + ${it.toppings.map((t) => t.name + (t.price > 0 ? ` (+${m(t.price)})` : '')).join(', ')}`);
+    if (it.toppings.length) L.push(`   + ${groupToppings(it.toppings).map((t) => toppingText(t, m)).join(', ')}`);
     if (it.note) L.push(`   Nota: ${it.note}`);
   }
   L.push('');
