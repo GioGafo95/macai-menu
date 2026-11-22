@@ -18,7 +18,9 @@
   --radius: 20px;
   --shadow: 0 2px 6px rgba(18, 48, 74, 0.04), 0 8px 24px rgba(18, 48, 74, 0.06);
   --shadow-lg: 0 16px 48px rgba(18, 48, 74, 0.18);
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-display: "Fredoka", "Nunito", system-ui, sans-serif;
+  --leaf: #4caf6e;
+  --leaf-soft: #e8f6ec;
   --font-body: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
@@ -33,7 +35,7 @@ body {
   line-height: 1.45;
   -webkit-tap-highlight-color: transparent;
 }
-h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.01em; }
+h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: 0; font-weight: 600; }
 img { max-width: 100%; display: block; }
 button { font: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }
@@ -360,3 +362,86 @@ textarea.input { resize: vertical; min-height: 70px; }
 .opt-qty button:disabled { opacity: .3; cursor: not-allowed; }
 .opt-qty b { min-width: 18px; text-align: center; font-size: .9rem; }
 .opts-grid .option span.opt-qty { margin-left: 26px; }
+
+/* =====================================================================
+   Menú de clientes · estilo Macaí (turquesa + naranja sobre crema)
+   ===================================================================== */
+.shop { background: var(--bg); }
+
+/* Barra superior */
+.topbar { background: var(--cyan-soft); }
+.topbar-inner { max-width: 960px; margin: 0 auto; padding: 12px 16px 4px; display: flex; align-items: center; gap: 10px; }
+.topbar-logo { height: 40px; width: auto; }
+.topbar-spacer { flex: 1; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 800; color: #1f7a45; background: #fff; padding: 4px 10px; border-radius: 999px; }
+.status i { width: 7px; height: 7px; border-radius: 50%; background: var(--leaf); box-shadow: 0 0 0 3px rgba(76,175,110,.25); }
+.status.off { color: var(--warn); }
+.status.off i { background: var(--warn); box-shadow: none; }
+.topbar-link { font-size: .84rem; font-weight: 800; text-decoration: none; color: var(--cyan-ink); background: #fff; padding: 7px 12px; border-radius: 999px; }
+
+/* Portada: saludo sobre turquesa suave con ola */
+.hero3 { position: relative; background: linear-gradient(180deg, var(--cyan-soft) 0%, #d6f4fa 100%); }
+.hero3-in { max-width: 960px; margin: 0 auto; padding: 14px 16px 34px; }
+.hello { margin: 0; font-weight: 800; color: var(--cyan-ink); font-size: .95rem; }
+.hero3 h2 { margin: 2px 0 6px; font-size: clamp(1.75rem, 7.5vw, 2.6rem); line-height: 1.08; font-weight: 600; color: var(--navy); }
+.hero3 .hl { color: var(--orange-strong); position: relative; white-space: nowrap; }
+.hero3 .hl::after { content: ''; position: absolute; left: 0; right: 0; bottom: .06em; height: .26em; background: rgba(254,145,78,.25); border-radius: 6px; z-index: -1; }
+.hero3 h2 { position: relative; z-index: 0; }
+.hero3-sub { margin: 0; color: #3c6a7b; font-weight: 700; font-size: .92rem; }
+.flavors { margin-top: 16px; }
+.flavors-label { display: block; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--cyan-ink); margin-bottom: 8px; }
+.flavor-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 2px; }
+.flavor-row::-webkit-scrollbar { display: none; }
+.flavor { flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; border: 0; background: #fff; color: var(--navy); font-weight: 700; font-size: .86rem; padding: 6px 12px 6px 6px; border-radius: 999px; box-shadow: 0 2px 8px rgba(8,122,145,.10); }
+.flavor i { width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(255,255,255,0) 45%), var(--c); box-shadow: inset 0 -2px 4px rgba(0,0,0,.12); }
+.flavor:active { transform: scale(.97); }
+.hero3-wave { position: absolute; left: 0; right: 0; bottom: -1px; width: 100%; height: 26px; }
+.hero3-wave path { fill: var(--bg); }
+
+/* Cómo lo recibes: una línea discreta */
+.ways { max-width: 960px; margin: 0 auto; padding: 6px 16px 0; }
+.ways-inner { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; font-size: .82rem; color: var(--navy); overflow-x: auto; white-space: nowrap; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+.ways-inner::-webkit-scrollbar { display: none; }
+.way b { font-weight: 800; }
+.way-dot { color: #c9b9a8; }
+
+/* Categorías: pestañas con subrayado */
+.shop .cats { margin-top: 6px; border-bottom: 1px solid var(--line); background: rgba(255,248,241,.96); }
+.shop .cats-inner { gap: 22px; padding: 6px 16px 0; }
+.shop .chip { border: 0; background: none; border-radius: 0; padding: 10px 0 11px; font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: var(--muted); border-bottom: 3px solid transparent; }
+.shop .chip.active { background: none; color: var(--navy); border-bottom-color: var(--orange); }
+
+/* Títulos de sección */
+.shop .section-title { font-size: 1.4rem; font-weight: 600; color: var(--navy); }
+.shop .section-title::before { content: ''; width: 18px; height: 18px; flex-shrink: 0; background: var(--leaf); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M4 36C4 16 16 4 36 4c0 20-12 32-32 32z'/%3E%3C/svg%3E") center/contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M4 36C4 16 16 4 36 4c0 20-12 32-32 32z'/%3E%3C/svg%3E") center/contain no-repeat; }
+.shop .section-title::after { background: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 11px); height: 2px; }
+
+/* Tarjetas: ilustración arriba, en cuadrícula de 2 */
+.shop .grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (min-width: 720px) { .shop .grid { grid-template-columns: repeat(3, 1fr); gap: 16px; } }
+.shop .product { flex-direction: column; align-items: stretch; gap: 0; padding: 0; border-radius: 22px; overflow: hidden; border: 1px solid #f3e9de; box-shadow: 0 1px 2px rgba(18,48,74,.04); }
+.shop .product:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(18,48,74,.08); }
+.shop .thumb { width: 100%; height: auto; aspect-ratio: 5 / 4; border-radius: 0; }
+.thumb-art { background: radial-gradient(circle at 50% 120%, rgba(255,255,255,.7), rgba(255,255,255,0) 60%), var(--tint, var(--cyan-soft)); display: grid; place-items: center; }
+.thumb-art .art { width: 68%; height: auto; }
+.shop .product-body { padding: 10px 12px 12px; }
+.shop .product h3 { font-size: 1.02rem; font-weight: 600; color: var(--navy); line-height: 1.2; margin-bottom: 3px; }
+.shop .product p { font-size: .8rem; line-height: 1.35; }
+.shop .product-foot { padding-top: 8px; }
+.shop .price { font-size: .98rem; }
+.price small { font-weight: 700; color: var(--muted); font-size: .76em; }
+.shop .tag { font-size: .66rem; letter-spacing: .02em; text-transform: none; color: var(--orange-strong); background: var(--orange-soft); margin-bottom: 6px; }
+.shop .add-badge { width: 32px; height: 32px; background: #fff; color: var(--orange-strong); border: 2px solid var(--orange); font-size: 1.2rem; }
+.shop .product:active .add-badge { background: var(--orange); color: #fff; }
+
+/* Hoja del producto */
+.sheet-img.thumb-art { height: 210px; }
+.sheet-img.thumb-art .art { width: auto; height: 86%; }
+
+/* Barra del carrito: anclada abajo en turquesa */
+.shop .cart-bar { background: none; padding: 0; }
+.shop .cart-bar .btn { max-width: none; border-radius: 22px 22px 0 0; background: linear-gradient(135deg, #12c7e6 0%, var(--cyan) 50%, #08a9c7 100%); color: var(--navy); box-shadow: 0 -8px 24px rgba(8,122,145,.22); padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); }
+.cart-left { display: inline-flex; align-items: center; gap: 8px; }
+.cart-ico { font-size: 1.1rem; }
+.shop .cart-bar .count { background: var(--navy); color: #fff; }
+@media (min-width: 720px) { .shop .cart-bar { padding: 0 16px 16px; } .shop .cart-bar .btn { max-width: 560px; border-radius: 22px; padding-bottom: 16px; } }

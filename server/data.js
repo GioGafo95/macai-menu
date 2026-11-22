@@ -27,6 +27,7 @@ const DEFAULTS = {
   free_delivery_over: '0',
   min_order: '0',
   pickup_enabled: '1',
+  dine_in_enabled: '1', // los clientes pueden pedir para comer en el local
   pickup_address: 'Calle General Ángel Flores 14, Centro, 81200 Los Mochis, Sin.',
   cash_enabled: '1',
   transfer_enabled: '1',
@@ -63,7 +64,7 @@ export const PRIVATE_KEYS = new Set(['session_secret', 'admin_password_hash', 'w
 export const PUBLIC_KEYS = [
   'business_name', 'tagline', 'whatsapp_number', 'currency', 'locale', 'estimated_time', 'pickup_estimated_time',
   'store_open', 'closed_message', 'delivery_enabled', 'delivery_flat_fee', 'free_delivery_over',
-  'delivery_mode', 'store_lat', 'store_lng', 'delivery_tiers', 'min_order', 'pickup_enabled', 'pickup_address', 'cash_enabled', 'transfer_enabled', 'card_enabled', 'bank_info',
+  'delivery_mode', 'store_lat', 'store_lng', 'delivery_tiers', 'min_order', 'pickup_enabled', 'dine_in_enabled', 'pickup_address', 'cash_enabled', 'transfer_enabled', 'card_enabled', 'bank_info',
 ];
 
 export const EDITABLE_KEYS = Object.keys(DEFAULTS).filter(

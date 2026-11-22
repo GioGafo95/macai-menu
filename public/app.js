@@ -1,5 +1,6 @@
 import { $, $$, esc, money, setCurrency, api, toast, store, emojiFor, toppingsText } from './common.js';
 import { createMap, searchAddress, reverseAddress, currentPosition } from './map.js';
+import { productArt, palette } from './art.js';
 
 // Modo mesero (/mesero/): la misma página, pero el personal captura el pedido del cliente.
 const STAFF = document.body.dataset.mode === 'mesero';
@@ -41,21 +42,30 @@ async function init() {
   }
   document.title = `${S.business_name} · Haz tu pedido`;
   $('#biz-name').textContent = S.business_name;
-  $('#biz-tagline').textContent = S.tagline || '';
-
-  const meta = [];
-  if (S.delivery_enabled === '1') meta.push(`<span class="pill">🛵 A domicilio${S.estimated_time ? ` · ${esc(S.estimated_time)}` : ''}</span>`);
-  if (S.pickup_enabled === '1') meta.push(`<span class="pill">🏪 Recoger${pickupTime() ? ` · ${esc(pickupTime())}` : ''}</span>`);
+  const open = S.store_open === '1';
+  $('#status').innerHTML = open ? '<i></i> Abierto' : '<i></i> Cerrado';
+  $('#status').classList.toggle('off', !open);
   const last = store.get(LAST_ORDER_KEY);
-  if (last?.token) meta.push(`<a class="pill accent" href="/pedido.html?t=${encodeURIComponent(last.token)}">📦 Mi último pedido</a>`);
-  $('#hero-meta').innerHTML = meta.join('');
+  if (last?.token) {
+    $('#last-order').href = `/pedido.html?t=${encodeURIComponent(last.token)}`;
+    $('#last-order').classList.remove('hidden');
+  }
 
-  if (S.store_open !== '1') {
+  // Formas de recibir el pedido
+  const ways = [];
+  if (S.delivery_enabled === '1') ways.push(['🛵', 'A domicilio', S.estimated_time || '']);
+  if (S.pickup_enabled === '1') ways.push(['🥡', 'Para llevar', pickupTime()]);
+  if (S.dine_in_enabled === '1') ways.push(['🍽️', 'Comer aquí', 'En el local']);
+  $('#ways').innerHTML = ways.length ? `<div class="ways-inner">${ways.map(([i, t, s]) =>
+    `<span class="way"><span aria-hidden="true">${i}</span> <b>${esc(t)}</b>${s ? ` <span class="muted">${esc(s)}</span>` : ''}</span>`).join('<span class="way-dot" aria-hidden="true">·</span>')}</div>` : '';
+
+  if (!open) {
     $('#closed').textContent = S.closed_message || 'Por ahora estamos cerrados.';
     $('#closed').classList.remove('hidden');
   }
 
   sanitizeCart();
+  renderHero();
   renderMenu();
   renderCartBar();
 }
@@ -65,10 +75,45 @@ async function init() {
 const productById = (id) => menu.products.find((p) => p.id === id);
 const pickupTime = () => S.pickup_estimated_time || S.estimated_time || '';
 
+const catName = (p) => menu.categories.find((c) => c.id === p.category_id)?.name || '';
+const tint = (p) => `${palette(`${p.name} ${p.description || ''}`, { base: '#6b2d5c' }).base}1c`;
+const shortMoney = (n) => money(n).replace(/[.,]00$/, '');
+/** Con opciones que se pueden cobrar aparte, el precio es "desde". */
+const shortPrice = (p) => `${(p.groups || []).length ? '<small>desde</small> ' : ''}${shortMoney(p.price)}`;
+
+/** Foto del producto o, si no tiene, su ilustración (bowl, smoothie o waffle con los colores del sabor). */
 function productThumb(p, cls = 'thumb') {
   return p.image
     ? `<img class="${cls}" src="${esc(p.image)}" alt="" loading="lazy">`
-    : `<div class="${cls} thumb-ph" aria-hidden="true">${emojiFor(p.id)}</div>`;
+    : `<div class="${cls} thumb-art" style="--tint:${tint(p)}" aria-hidden="true">${productArt(p, catName(p))}</div>`;
+}
+
+/** Portada: saludo, frase del negocio y los sabores de base con su color. */
+function renderHero() {
+  const box = $('#hero');
+  if (!box) return;
+  // Sabores: el primer grupo obligatorio (ej. "Sabor de tu base") del producto destacado
+  const star = menu.products.find((x) => x.featured) || menu.products.find((x) => (x.groups || []).length);
+  const flavorGroup = (star?.groups || []).map((id) => menu.groups[id]).find((g) => g && g.min_select > 0);
+  const flavors = flavorGroup?.options || [];
+  box.innerHTML = `
+    <div class="hero3">
+      <div class="hero3-in">
+        <p class="hello">¡Hola! 👋</p>
+        <h2>¿Qué se te antoja <span class="hl">hoy</span>?</h2>
+        <p class="hero3-sub">🌱 ${esc(S.tagline || 'Hecho al momento')}</p>
+        ${flavors.length && star ? `
+        <div class="flavors">
+          <span class="flavors-label">Nuestros sabores</span>
+          <div class="flavor-row">
+            ${flavors.map((o) => `<button class="flavor" data-flavor="${star.id}" title="${esc(o.description || o.name)}">
+              <i style="--c:${palette(`${o.name} ${o.description || ''}`, { base: '#6b2d5c' }).base}"></i>${esc(o.name)}</button>`).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+      <svg class="hero3-wave" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22C60 4 120 4 200 20s140 18 200 0v20H0z"/></svg>
+    </div>`;
+  $$('[data-flavor]', box).forEach((b) => b.addEventListener('click', () => openProduct(productById(Number(b.dataset.flavor)))));
 }
 
 function renderMenu() {
@@ -77,6 +122,7 @@ function renderMenu() {
     $('#menu').innerHTML = '<div class="empty"><div class="big">🥗</div><p>Pronto tendremos productos disponibles.</p></div>';
     return;
   }
+  const inCat = (c) => menu.products.filter((p) => p.category_id === c.id);
 
   $('#cats').innerHTML = cats.map((c, i) =>
     `<button class="chip${i === 0 ? ' active' : ''}" data-cat="${c.id}">${esc(c.name)}</button>`).join('');
@@ -85,23 +131,23 @@ function renderMenu() {
     <section>
       <h2 class="section-title" id="cat-${c.id}">${esc(c.name)}</h2>
       <div class="grid">
-        ${menu.products.filter((p) => p.category_id === c.id).map((p) => `
+        ${inCat(c).map((p) => `
           <button class="product" data-product="${p.id}" aria-label="${esc(p.name)}, ${money(p.price)}">
+            ${productThumb(p)}
             <div class="product-body">
-              ${p.featured ? '<span class="tag">⭐ Favorito</span>' : ''}
+              ${p.featured ? '<span class="tag">⭐ Favorito de la casa</span>' : ''}
               <h3>${esc(p.name)}</h3>
               <p>${esc(p.description)}</p>
               <div class="product-foot">
-                <span class="price">${money(p.price)}</span>
+                <span class="price">${shortPrice(p)}</span>
                 <span class="add-badge" aria-hidden="true">+</span>
               </div>
             </div>
-            ${productThumb(p)}
           </button>`).join('')}
       </div>
     </section>`).join('');
 
-  $$('[data-product]').forEach((el) => el.addEventListener('click', () => openProduct(productById(Number(el.dataset.product)))));
+  $$('#menu [data-product]').forEach((el) => el.addEventListener('click', () => openProduct(productById(Number(el.dataset.product)))));
 
   $$('.chip').forEach((chip) => chip.addEventListener('click', () => {
     $(`#cat-${chip.dataset.cat}`).scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -116,7 +162,7 @@ function renderMenu() {
       $(`.chip[data-cat="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
   }, { rootMargin: '-80px 0px -70% 0px' });
-  $$('.section-title').forEach((h) => obs.observe(h));
+  $$('.section-title[id]').forEach((h) => obs.observe(h));
 }
 
 /* ============================ Hoja / modal ============================ */
@@ -480,9 +526,10 @@ function openCart() {
 function openCheckout() {
   const canDeliver = S.delivery_enabled === '1';
   const canPickup = STAFF || S.pickup_enabled === '1';
+  const canDineIn = STAFF || S.dine_in_enabled === '1';
   if (!checkout.fulfillment || (checkout.fulfillment === 'delivery' && !canDeliver) || (checkout.fulfillment === 'pickup' && !canPickup)
-    || (checkout.fulfillment === 'dine_in' && !STAFF)) {
-    checkout.fulfillment = STAFF ? 'dine_in' : canDeliver ? 'delivery' : 'pickup';
+    || (checkout.fulfillment === 'dine_in' && !canDineIn)) {
+    checkout.fulfillment = STAFF ? 'dine_in' : canDeliver ? 'delivery' : canPickup ? 'pickup' : 'dine_in';
   }
   const canCash = STAFF || S.cash_enabled === '1';
   const canTransfer = STAFF || S.transfer_enabled === '1';
@@ -502,12 +549,13 @@ function openCheckout() {
         <span class="label">${STAFF ? 'Tipo de pedido' : '¿Cómo lo quieres?'}</span>
         <div class="choice-row">
           ${STAFF ? '<button type="button" class="choice" data-ful="dine_in"><span class="ico">🍽️</span><strong>Comer aquí</strong><small>En el local</small></button>' : ''}
-          ${canPickup ? `<button type="button" class="choice" data-ful="pickup"><span class="ico">${STAFF ? '🥡' : '🏪'}</span><strong>${STAFF ? 'Para llevar' : 'Recoger'}</strong><small>${STAFF ? 'Se lo lleva' : pickupTime() ? `Listo en ${esc(pickupTime())}` : 'Sin costo de envío'}</small></button>` : ''}
+          ${canPickup ? `<button type="button" class="choice" data-ful="pickup"><span class="ico">🥡</span><strong>${STAFF ? 'Para llevar' : 'Recoger'}</strong><small>${STAFF ? 'Se lo lleva' : pickupTime() ? `Para llevar · ${esc(pickupTime())}` : 'Para llevar'}</small></button>` : ''}
+          ${!STAFF && canDineIn ? `<button type="button" class="choice" data-ful="dine_in"><span class="ico">🍽️</span><strong>Comer aquí</strong><small>En ${esc(S.business_name || 'el local')}</small></button>` : ''}
           ${canDeliver ? `<button type="button" class="choice" data-ful="delivery"><span class="ico">🛵</span><strong>A domicilio</strong><small data-fee-label></small></button>` : ''}
         </div>
       </div>
-      ${STAFF ? `<div class="field" data-dinein>
-        <label for="c-table">Número de mesa</label>
+      ${canDineIn ? `<div class="field" data-dinein>
+        <label for="c-table">Número de mesa${STAFF ? '' : ' <span class="muted small">(opcional, si ya tienes mesa)</span>'}</label>
         <input class="input" id="c-table" name="table" inputmode="numeric" maxlength="20" autocomplete="off" placeholder="Ej. 4" value="${esc(checkout.table)}">
       </div>` : ''}`;
   if ((checkout.payment_method === 'cash' && !canCash) || (checkout.payment_method === 'transfer' && !canTransfer)
@@ -557,7 +605,7 @@ function openCheckout() {
       </div>
       <div data-pickup>
         ${!STAFF && (S.pickup_address || pickupTime()) ? `<div class="box">${[
-          S.pickup_address ? `📍 Recoges en: ${esc(S.pickup_address)}` : '',
+          S.pickup_address ? `📍 <span data-pickup-where>Recoges en</span>: ${esc(S.pickup_address)}` : '',
           pickupTime() ? `⏱ Tu pedido estará listo en aprox. ${esc(pickupTime())}` : '',
         ].filter(Boolean).join('\n')}</div>` : ''}
       </div>
@@ -611,7 +659,9 @@ function openCheckout() {
     $$('[data-pay]', sheet).forEach((b) => b.classList.toggle('active', b.dataset.pay === checkout.payment_method));
     $('[data-pay="card"]', sheet)?.classList.toggle('hidden', checkout.fulfillment === 'delivery');
     $('[data-delivery]', sheet).classList.toggle('hidden', checkout.fulfillment !== 'delivery');
-    $('[data-pickup]', sheet).classList.toggle('hidden', checkout.fulfillment !== 'pickup');
+    $('[data-pickup]', sheet).classList.toggle('hidden', checkout.fulfillment === 'delivery');
+    const where = $('[data-pickup-where]', sheet);
+    if (where) where.textContent = checkout.fulfillment === 'dine_in' ? 'Te esperamos en' : 'Recoges en';
     $('[data-dinein]', sheet)?.classList.toggle('hidden', checkout.fulfillment !== 'dine_in');
     $('[data-opt-name]', sheet).classList.toggle('hidden', !(STAFF && checkout.fulfillment === 'dine_in'));
     $('[data-opt-phone]', sheet).classList.toggle('hidden', !(STAFF && checkout.fulfillment !== 'delivery'));
@@ -756,6 +806,7 @@ function openCheckout() {
     $('[data-error]', sheet).classList.add('hidden');
     const dineIn = STAFF && checkout.fulfillment === 'dine_in';
     if (dineIn && !String(checkout.table).trim()) return fail('Escribe el número de mesa', 'table');
+    if (!STAFF && checkout.fulfillment !== 'dine_in') checkout.table = '';
     if (!dineIn && checkout.customer_name.trim().length < 2) return fail(STAFF ? 'Escribe el nombre del cliente' : 'Escribe tu nombre', 'customer_name');
     if (dineIn && checkout.customer_name.trim().length === 1) return fail('Escribe el nombre completo o déjalo vacío', 'customer_name');
     const phoneDigits = checkout.customer_phone.replace(/\D/g, '').length;
@@ -790,7 +841,8 @@ function openCheckout() {
           payment_method: checkout.payment_method,
           cash_amount: checkout.payment_method === 'cash' && checkout.cash_amount ? Number(checkout.cash_amount) : null,
           notes: checkout.notes,
-          ...(STAFF ? { table: checkout.table, paid: !!checkout.paid, taken_by: store.get(WAITER_KEY, '') } : {}),
+          ...(checkout.fulfillment === 'dine_in' ? { table: checkout.table } : {}),
+          ...(STAFF ? { paid: !!checkout.paid, taken_by: store.get(WAITER_KEY, '') } : {}),
         },
       });
       if (STAFF) return staffSent(res);

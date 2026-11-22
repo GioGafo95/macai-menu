@@ -350,7 +350,7 @@ function orderCard(o, flash) {
             ${o.address_ref ? `<div class="muted small">${esc(o.address_ref)}</div>` : ''}
             <a class="small" href="https://www.google.com/maps/search/?api=1&query=${o.location ? `${o.location.lat},${o.location.lng}` : encodeURIComponent(o.address)}" target="_blank" rel="noopener">${o.location ? '📍 Ver ubicación en el mapa' : 'Ver en mapa'}</a></div></div>`
         : o.fulfillment === 'dine_in'
-          ? `<div class="row"><span>🍽️</span><div><strong>Comer aquí · Mesa ${esc(o.table)}</strong></div></div>`
+          ? `<div class="row"><span>🍽️</span><div><strong>Comer aquí${o.table ? ` · Mesa ${esc(o.table)}` : ' · en el local'}</strong></div></div>`
           : `<div class="row"><span>🏪</span><div><strong>${o.source === 'mesero' ? 'Para llevar' : 'Recoge en tienda'}</strong></div></div>`}
       <div class="order-items">
         ${o.items.map((i) => `
@@ -826,7 +826,8 @@ async function renderDelivery() {
       id: 'delivery', title: 'Entrega y recolección', two: true,
       fields: [
         { name: 'delivery_enabled', label: 'Ofrecer envío a domicilio', type: 'checkbox' },
-        { name: 'pickup_enabled', label: 'Permitir recoger en tienda', type: 'checkbox' },
+        { name: 'pickup_enabled', label: 'Permitir recoger en tienda (para llevar)', type: 'checkbox' },
+        { name: 'dine_in_enabled', label: 'Permitir pedir para comer aquí en el local', type: 'checkbox' },
         { name: 'delivery_mode', label: '¿Cómo se cobra el envío?', type: 'select', options: [
           { value: 'distance', label: '📍 Por distancia (el cliente marca su ubicación en un mapa)' },
           { value: 'zones', label: '🗺️ Por zonas o costo fijo' },

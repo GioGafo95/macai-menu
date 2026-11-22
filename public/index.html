@@ -9,20 +9,23 @@
   <link rel="icon" type="image/png" href="/icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Nunito:wght@400;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap">
   <link rel="apple-touch-icon" href="/icon.png">
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
-  <header class="hero">
-    <div class="hero-inner">
+<body class="shop">
+  <header class="topbar">
+    <div class="topbar-inner">
       <h1 class="sr-only" id="biz-name">Macaí Bowls</h1>
-      <img class="hero-logo" src="/logo.png" alt="Macaí Bowls" width="1492" height="596">
-      <p id="biz-tagline"></p>
-      <div class="hero-meta" id="hero-meta"></div>
+      <img class="topbar-logo" src="/logo.png" alt="Macaí Bowls" width="1492" height="596">
+      <span class="status" id="status"></span>
+      <span class="topbar-spacer"></span>
+      <a class="topbar-link hidden" id="last-order">📦 Mi pedido</a>
     </div>
   </header>
   <div id="closed" class="closed-banner hidden"></div>
+  <section class="hero-wrap" id="hero" aria-label="Destacado"></section>
+  <div class="ways" id="ways"></div>
 
   <nav class="cats" aria-label="Categorías"><div class="cats-inner" id="cats"></div></nav>
 
@@ -30,7 +33,7 @@
 
   <div class="cart-bar hidden" id="cart-bar">
     <button class="btn btn-lg btn-block" id="open-cart">
-      <span><span class="count" id="cart-count">0</span>&nbsp; Ver pedido</span>
+      <span class="cart-left"><span class="cart-ico" aria-hidden="true">🛍️</span><span class="count" id="cart-count">0</span> Ver mi pedido</span>
       <span id="cart-total">$0</span>
     </button>
   </div>

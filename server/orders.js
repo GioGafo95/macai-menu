@@ -155,9 +155,11 @@ export function buildOrder(input, s, cat, { quote = null, staff = null } = {}) {
     throw new HttpError(400, `El pedido mínimo es de ${money(minOrder, s)}`);
   }
 
-  const fulfillment = staff && input.fulfillment === 'dine_in' ? 'dine_in' : input.fulfillment === 'pickup' ? 'pickup' : 'delivery';
+  if (input.fulfillment === 'dine_in' && !staff && s.dine_in_enabled !== '1') throw new HttpError(400, 'La opción de comer aquí no está disponible');
+  const fulfillment = input.fulfillment === 'dine_in' ? 'dine_in' : input.fulfillment === 'pickup' ? 'pickup' : 'delivery';
   const table = fulfillment === 'dine_in' ? str(input.table, 20) : '';
-  if (fulfillment === 'dine_in' && !table) throw new HttpError(400, 'Escribe el número de mesa');
+  // El mesero siempre pone la mesa; el cliente puede pedir para comer aquí sin saberla todavía
+  if (fulfillment === 'dine_in' && staff && !table) throw new HttpError(400, 'Escribe el número de mesa');
 
   let customer_name = str(input.customer_name, 80);
   if (!customer_name && table) customer_name = `Mesa ${table}`;
@@ -376,7 +378,7 @@ export function publicOrder(o, s) {
     delivery_fee: o.delivery_fee,
     total: o.total,
     bank_info: o.payment_method === 'transfer' ? s.bank_info : null,
-    pickup_address: o.fulfillment === 'pickup' ? s.pickup_address : null,
+    pickup_address: o.fulfillment !== 'delivery' ? s.pickup_address : null,
   };
 }
 
@@ -478,7 +480,7 @@ export function formatOrderText(o, s, { baseUrl = '', forCustomer = false } = {}
   if (!forCustomer && o.source === 'mesero') L.push(`🧑‍🍳 Lo tomó: ${o.taken_by || 'mesero'}`);
   L.push(`Cliente: ${o.customer.name}${o.customer.phone ? ` · ${o.customer.phone}` : ''}`);
   if (o.fulfillment === 'dine_in') {
-    L.push(`🍽️ Comer aquí · Mesa ${o.table}`);
+    L.push(`🍽️ Comer aquí${o.table ? ` · Mesa ${o.table}` : ' (en el local)'}`);
   } else if (o.fulfillment === 'delivery') {
     L.push(`Envío a domicilio${o.zone ? ` (${o.zone.name})` : ''}${o.location ? ` · ${o.location.distance_km} km` : ''}`);
     L.push(`Dirección: ${o.address}`);
