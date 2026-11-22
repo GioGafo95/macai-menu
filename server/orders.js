@@ -52,8 +52,8 @@ export const byDistance = (s) => s.delivery_mode === 'distance';
  * Modifica cada topping: price = lo que se cobra, list_price = precio normal, included = true si entró en el paquete.
  * La misma regla está en public/app.js (solo para mostrar el precio; el servidor manda).
  */
-/** Veces que se puede pedir la misma opción (ej. doble granola). Igual en public/app.js. */
-export const MAX_REPEAT = 3;
+/** Tope de seguridad de veces que se puede pedir la misma opción (solo evita errores de dedo). Igual en public/app.js. */
+export const MAX_REPEAT = 20;
 
 /** Agrupa opciones repetidas para mostrarlas: [{ name, n, price }] (price = suma de lo cobrado). */
 export function groupToppings(list = []) {

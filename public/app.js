@@ -200,8 +200,8 @@ function groupRule(g) {
   return 'Opcional';
 }
 
-/** Veces que se puede pedir la misma opción (ej. doble granola). Igual que MAX_REPEAT en server/orders.js. */
-const MAX_REPEAT = 3;
+/** Tope de seguridad de veces que se puede pedir la misma opción (solo evita errores de dedo). Igual que MAX_REPEAT en server/orders.js. */
+const MAX_REPEAT = 20;
 /** Solo se repiten opciones de grupos de varias (toppings, frutas…), no los de "elige 1". */
 const repeatable = (g) => g.max_select !== 1;
 
