@@ -106,14 +106,14 @@ function renderHero() {
         <div class="flavors">
           <span class="flavors-label">Nuestros sabores</span>
           <div class="flavor-row">
-            ${flavors.map((o) => `<button class="flavor" data-flavor="${star.id}" title="${esc(o.description || o.name)}">
+            ${flavors.map((o) => `<button class="flavor" data-flavor="${star.id}" data-opt="${o.id}" title="${esc(o.description || o.name)}">
               <i style="--c:${palette(`${o.name} ${o.description || ''}`, { base: '#6b2d5c' }).base}"></i>${esc(o.name)}</button>`).join('')}
           </div>
         </div>` : ''}
       </div>
       <svg class="hero3-wave" viewBox="0 0 400 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22C60 4 120 4 200 20s140 18 200 0v20H0z"/></svg>
     </div>`;
-  $$('[data-flavor]', box).forEach((b) => b.addEventListener('click', () => openProduct(productById(Number(b.dataset.flavor)))));
+  $$('[data-flavor]', box).forEach((b) => b.addEventListener('click', () => openProduct(productById(Number(b.dataset.flavor)), null, Number(b.dataset.opt))));
 }
 
 function renderMenu() {
@@ -205,7 +205,7 @@ const MAX_REPEAT = 20;
 /** Solo se repiten opciones de grupos de varias (toppings, frutas…), no los de "elige 1". */
 const repeatable = (g) => g.max_select !== 1;
 
-function openProduct(p, editKey) {
+function openProduct(p, editKey, preselect) {
   if (!p) return;
   const editing = editKey ? cart.find((i) => i.key === editKey) : null;
   let qty = editing?.quantity || 1;
@@ -213,6 +213,8 @@ function openProduct(p, editKey) {
   // Veces que se eligió cada opción (las de grupos de varias opciones se pueden repetir: doble granola)
   const counts = new Map();
   for (const id of editing?.toppings || []) counts.set(id, (counts.get(id) || 0) + 1);
+  // Abierto desde un sabor de la portada: ese sabor ya viene elegido
+  if (!editing && preselect && groups.some((g) => g.options.some((o) => o.id === preselect))) counts.set(preselect, 1);
   const closed = !STAFF && S.store_open !== '1';
 
   const sheet = openSheet(`
