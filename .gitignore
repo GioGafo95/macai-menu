@@ -5,3 +5,4 @@ data/
 infra/cdk.out/
 infra/outputs.json
 .bundle-test/
+backups/

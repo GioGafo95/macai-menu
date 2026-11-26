@@ -1237,7 +1237,7 @@ async function renderInventory() {
 
     <div class="panel inv-panel">
       <div class="panel-head"><h3>📦 Ingredientes</h3>
-        <input class="input inv-search" type="search" placeholder="Buscar…" value="${esc(invSearch)}" data-inv-search></div>
+        <input class="input inv-search" type="search" placeholder="🔍 Buscar ingrediente…" value="${esc(invSearch)}" data-inv-search></div>
       <div data-inv-list>${items.map(itemRow).join('')}</div>
     </div>
 
@@ -1356,7 +1356,8 @@ async function renderInventory() {
   const search = $('[data-inv-search]', view);
   const applySearch = () => {
     invSearch = search.value.trim().toLowerCase();
-    $$('[data-inv-list] .inv-row', view).forEach((r) => r.classList.toggle('hidden', !!invSearch && !r.dataset.search.includes(invSearch)));
+    const q = fold(invSearch);
+    $$('[data-inv-list] .inv-row', view).forEach((r) => r.classList.toggle('hidden', !!q && !fold(r.dataset.search).includes(q)));
   };
   search?.addEventListener('input', applySearch);
   if (search && invSearch) applySearch();
@@ -1425,6 +1426,7 @@ function purchaseForm(item, items, onDone) {
   });
   const form = document.querySelector('.sheet form');
   if (!form) return;
+  if (pick) ingredientPicker(form.elements.item_id);
   const cur = () => (pick ? items.find((i) => i.id === Number(form.elements.item_id.value)) : item) || first;
   const preview = () => {
     const it = cur();
@@ -1540,6 +1542,7 @@ async function renderPurchases() {
     drawPriceChart(all, data.months);
   }));
   $('[data-pur-item]', view)?.addEventListener('change', (e) => { purItem = Number(e.target.value); drawPriceChart(all, data.months); });
+  ingredientPicker($('[data-pur-item]', view));
   $$('[data-del-purchase]', view).forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('¿Borrar esta compra del historial? La existencia del inventario no cambia (si hace falta, corrígela con Conteo).')) return;
     try { await A(`/inventory/purchases/${b.dataset.delPurchase}`, { method: 'DELETE' }); toast('✓ Compra borrada'); reload(); } catch (e) { toast(e.message, 4000); }
@@ -1735,6 +1738,68 @@ async function openRecipe(key, name, onSaved, fallback) {
   } catch (e) { toast(e.message, 4000); }
 }
 
+/** Texto sin acentos ni mayúsculas para buscar ("platano" encuentra "Plátano"). */
+const fold = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/**
+ * Convierte un <select> de ingredientes en un buscador: escribes y se filtra la lista.
+ * El <select> original se queda (oculto) con el valor, así los formularios siguen igual.
+ */
+function ingredientPicker(select) {
+  if (!select || select.dataset.picker) return;
+  select.dataset.picker = '1';
+  const opts = () => [...select.options].filter((o) => o.value !== '');
+  const wrap = document.createElement('div');
+  wrap.className = 'picker';
+  wrap.innerHTML = `<input class="input picker-input" type="search" autocomplete="off" placeholder="🔍 Buscar ingrediente…" aria-label="Buscar ingrediente"><div class="picker-list" role="listbox" hidden></div>`;
+  select.after(wrap);
+  select.hidden = true;
+  const input = $('input', wrap);
+  const list = $('.picker-list', wrap);
+  let active = 0;
+  const label = () => select.selectedOptions[0]?.value ? select.selectedOptions[0].textContent : '';
+  input.value = label();
+  const show = () => {
+    const q = fold(input.value === label() ? '' : input.value);
+    const found = opts().filter((o) => !q || fold(o.textContent).includes(q));
+    active = Math.min(active, Math.max(found.length - 1, 0));
+    list.innerHTML = found.length
+      ? found.map((o, i) => `<button type="button" role="option" class="picker-opt${i === active ? ' on' : ''}${o.value === select.value ? ' sel' : ''}" data-v="${esc(o.value)}">${esc(o.textContent)}</button>`).join('')
+      : '<div class="picker-empty">Sin resultados</div>';
+    list.hidden = false;
+  };
+  const choose = (v) => {
+    select.value = v;
+    input.value = label();
+    list.hidden = true;
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  input.addEventListener('focus', () => { active = 0; input.select(); show(); });
+  input.addEventListener('input', () => { active = 0; show(); });
+  input.addEventListener('keydown', (e) => {
+    const btns = $$('.picker-opt', list);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) return show();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % Math.max(btns.length, 1);
+      btns.forEach((b, i) => b.classList.toggle('on', i === active));
+      btns[active]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (btns[active]) choose(btns[active].dataset.v);
+    } else if (e.key === 'Escape') {
+      input.value = label(); list.hidden = true;
+    }
+  });
+  // mousedown para que el clic llegue antes de que el input pierda el foco
+  list.addEventListener('mousedown', (e) => {
+    const b = e.target.closest('[data-v]');
+    if (b) { e.preventDefault(); choose(b.dataset.v); }
+  });
+  input.addEventListener('blur', () => setTimeout(() => { list.hidden = true; input.value = label(); }, 120));
+}
+
 function editRecipe(key, name, data, items, onSaved, fallback) {
   const byIdR = new Map(items.map((i) => [i.id, i]));
   const own = data.recipes[key] || [];
@@ -1776,11 +1841,12 @@ function editRecipe(key, name, data, items, onSaved, fallback) {
         ${unitSelect(l)}
         <button class="icon-btn" data-remove aria-label="Quitar">×</button>
       </div>`).join('') : '<p class="muted small">Sin ingredientes: este producto no descuenta nada.</p>';
+    $$('select[data-f="item_id"]', box).forEach(ingredientPicker);
   };
   draw();
   box.addEventListener('input', (e) => {
     const row = e.target.closest('.recipe-line');
-    if (!row) return;
+    if (!row || !e.target.dataset.f) return;
     const l = lines[Number(row.dataset.idx)];
     l[e.target.dataset.f] = e.target.value;
     if (e.target.dataset.f === 'item_id') { l.unit = unitOf(e.target.value); $('.recipe-unit', row).outerHTML = unitSelect(l); }
@@ -1791,7 +1857,7 @@ function editRecipe(key, name, data, items, onSaved, fallback) {
     lines.splice(Number(b.closest('.recipe-line').dataset.idx), 1);
     draw();
   });
-  $('[data-add-line]', sheet).addEventListener('click', () => { lines.push({ item_id: '', qty: '' }); draw(); $$('.recipe-line select', box).at(-1)?.focus(); });
+  $('[data-add-line]', sheet).addEventListener('click', () => { lines.push({ item_id: '', qty: '' }); draw(); $$('.recipe-line .picker-input', box).at(-1)?.focus(); });
   $('[data-save]', sheet).addEventListener('click', async (e) => {
     e.target.disabled = true;
     try {

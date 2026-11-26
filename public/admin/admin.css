@@ -279,3 +279,14 @@ select.recipe-unit { padding: 10px 6px; }
 .subnav-in::-webkit-scrollbar { display: none; }
 .subnav .chip { flex-shrink: 0; }
 [hidden] { display: none !important; }
+
+/* Buscador de ingredientes (reemplaza los <select> largos) */
+.picker { position: relative; min-width: 0; }
+.picker-input { width: 100%; }
+.picker-list { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 240px; overflow-y: auto;
+  background: #fff; border: 1px solid #e3e3e3; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,.14); padding: 4px; }
+.picker-opt { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 9px 10px; border-radius: 8px; font: inherit; cursor: pointer; }
+.picker-opt.on, .picker-opt:hover { background: #f1f7f8; }
+.picker-opt.sel { font-weight: 700; }
+.picker-empty { padding: 10px; color: #888; font-size: .9rem; }
+.pur-item + .picker { max-width: 320px; margin-bottom: 8px; }
